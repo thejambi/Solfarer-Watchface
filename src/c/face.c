@@ -878,24 +878,21 @@ static void tick_handler(struct tm *t, TimeUnits changed) {
 }
 
 static void tap_handler(AccelAxisType axis, int32_t dir) {
-  if (!g_cfg.tap_info) return;
-  if (health_mode()) {             // health mode: peek the night's sleep
-    if (s_mode != MODE_MAP) return;
+  if (!g_cfg.tap_info || s_mode != MODE_MAP) return;
+  // both modes: browse the neighbor board — display only, the bell's pick
+  // is untouched
+  int window = cur_window();
+  int n = board_count(window);
+  if (n > 0) {
+    int cur = browsing() ? s_browse % n : board_sel(window, s_hour, s_min);
+    s_browse = (cur + 1) % n;
+    s_browse_at = time(NULL);
+  }
+  if (health_mode()) {             // health mode: also peek the night's sleep
     s_sleep_peek_at = time(NULL);
     if (s_peek_timer) app_timer_cancel(s_peek_timer);
     s_peek_timer = app_timer_register(SLEEP_PEEK_MS + 300, peek_expire, NULL);
-    if (s_layer) layer_mark_dirty(s_layer);
-    return;
   }
-  // star mode: shake browses the neighbor board — display only, the bell's
-  // pick is untouched
-  if (s_mode != MODE_MAP) return;
-  int window = cur_window();
-  int n = board_count(window);
-  if (n < 1) return;
-  int cur = browsing() ? s_browse % n : board_sel(window, s_hour, s_min);
-  s_browse = (cur + 1) % n;
-  s_browse_at = time(NULL);
   if (s_layer) layer_mark_dirty(s_layer);
 }
 
