@@ -1,31 +1,45 @@
 #!/usr/bin/env python3
-"""Curate the HYG catalog into a Pebble-sized Local Bubble.
+"""Curate the HYG catalog into Solfarer's Local Bubble and emit the packed
+resource + generated header.
 
-Reads hygdata_v41.csv, converts to galactic XYZ, dedupes multi-star systems,
-resolves display names, then reports: counts by radius, name coverage,
-packed-size estimates, and walk connectivity at candidate hop radii.
+Downloads hygdata_v41.csv on first run (34 MB, gitignored). Outputs:
+  resources/data/stars.bin  — uint16 count, count x 12-byte records sorted by
+                              distance from Sol, then NUL-terminated names
+  src/c/catalog_gen.h       — record struct, class letters, constellation table
+
+Record (little-endian, 12 bytes):
+  int16  x, y, z      galactic, 0.01 ly units
+  uint16 name_off     offset into the names blob
+  int8   absmag4      absolute magnitude x 4
+  uint8  spect        high nibble: index into CAT_CLASSES; low: subclass digit
+  uint8  con          index into CAT_CONS, 0xFF none
+  uint8  reserved
 """
-import csv, math, sys, os
+import csv, math, os, struct, sys, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LY_PER_PC = 3.26156
+ROOT = os.path.dirname(HERE)
+CSV = os.path.join(HERE, 'hygdata_v41.csv')
+URL = ('https://raw.githubusercontent.com/astronexus/HYG-Database/main/'
+       'hyg/CURRENT/hygdata_v41.csv')
 
-# J2000 equatorial -> galactic rotation
+LY_PER_PC = 3.26156
+MAX_LY = 100.0
+NEAR_KEEP_LY = 50.0        # inside this, keep everything
+DIM_CAP_ABSMAG = 8.0       # beyond, drop dim anonymous stars
+CLASSES = "OBAFGKMD?"
+
 R = [[-0.0548755604, -0.8734370902, -0.4838350155],
      [ 0.4941094279, -0.4448296300,  0.7469822445],
      [-0.8676661490, -0.1980763734,  0.4559837762]]
 
-GREEK = {  # bayer 'bf' uses 3-letter abbreviations
+GREEK = {
  'Alp':'Alpha','Bet':'Beta','Gam':'Gamma','Del':'Delta','Eps':'Epsilon',
  'Zet':'Zeta','Eta':'Eta','The':'Theta','Iot':'Iota','Kap':'Kappa',
  'Lam':'Lambda','Mu':'Mu','Nu':'Nu','Xi':'Xi','Omi':'Omicron','Pi':'Pi',
  'Rho':'Rho','Sig':'Sigma','Tau':'Tau','Ups':'Upsilon','Phi':'Phi',
  'Chi':'Chi','Psi':'Psi','Ome':'Omega'}
 
-def gal(x, y, z):
-    return (R[0][0]*x + R[0][1]*y + R[0][2]*z,
-            R[1][0]*x + R[1][1]*y + R[1][2]*z,
-            R[2][0]*x + R[2][1]*y + R[2][2]*z)
 
 def pick_name(r):
     if r['proper']:
@@ -40,103 +54,139 @@ def pick_name(r):
         return bf, 2
     if r['gl']:
         gl = r['gl'].strip()
-        return (gl if gl.startswith(('GJ','Gl','NN','Wo')) else 'GJ ' + gl), 1
+        return (gl if gl.startswith(('GJ', 'Gl', 'NN', 'Wo')) else 'GJ ' + gl), 1
     if r['hip']:
         return 'HIP ' + r['hip'], 0
     if r['hd']:
         return 'HD ' + r['hd'], 0
     return 'Star ' + r['id'], 0
 
-MAX_LY = 130.0
-stars = []
-with open(os.path.join(HERE, 'hygdata_v41.csv')) as f:
-    for r in csv.DictReader(f):
-        if r['id'] == '0':
-            continue                       # Sol handled specially at origin
-        try:
-            dpc = float(r['dist'])
-        except ValueError:
-            continue
-        if dpc <= 0 or dpc >= 90000:      # unknown distance sentinel
-            continue
-        dly = dpc * LY_PER_PC
-        if dly > MAX_LY:
-            continue
-        x, y, z = gal(float(r['x']), float(r['y']), float(r['z']))
-        name, q = pick_name(r)
-        stars.append({
-            'name': name, 'q': q,
-            'x': x * LY_PER_PC, 'y': y * LY_PER_PC, 'z': z * LY_PER_PC,
-            'dly': dly,
-            'mag': float(r['mag']) if r['mag'] else 15.0,
-            'absmag': float(r['absmag']) if r['absmag'] else 10.0,
-            'spect': (r['spect'].strip() or '?')[0].upper(),
-            'con': r['con'].strip(),
-            'base': r['base'].strip() or r['id'],
-        })
 
-# --- dedupe multi-star systems: keep the brightest component per base id,
-# --- and also merge anything closer than 0.1 ly (unlinked doubles)
-by_base = {}
-for s in stars:
-    k = s['base']
-    if k not in by_base or s['mag'] < by_base[k]['mag']:
-        by_base[k] = s
-sys_stars = sorted(by_base.values(), key=lambda s: s['dly'])
-merged = []
-for s in sys_stars:
-    dup = False
-    for t in merged:
-        if abs(s['x']-t['x']) < 0.15 and abs(s['y']-t['y']) < 0.15 and abs(s['z']-t['z']) < 0.15:
-            dup = True
-            break
-    if not dup:
+def main():
+    if not os.path.exists(CSV):
+        print('downloading HYG v4.1 (34 MB)...')
+        urllib.request.urlretrieve(URL, CSV)
+
+    stars = []
+    with open(CSV) as f:
+        for r in csv.DictReader(f):
+            if r['id'] == '0':
+                continue                       # Sol is index -1 in the app
+            try:
+                dpc = float(r['dist'])
+            except ValueError:
+                continue
+            if dpc <= 0 or dpc >= 90000:
+                continue
+            dly = dpc * LY_PER_PC
+            if dly > MAX_LY:
+                continue
+            xe, ye, ze = float(r['x']), float(r['y']), float(r['z'])
+            x = (R[0][0]*xe + R[0][1]*ye + R[0][2]*ze) * LY_PER_PC
+            y = (R[1][0]*xe + R[1][1]*ye + R[1][2]*ze) * LY_PER_PC
+            z = (R[2][0]*xe + R[2][1]*ye + R[2][2]*ze) * LY_PER_PC
+            name, q = pick_name(r)
+            absmag = float(r['absmag']) if r['absmag'] else 10.0
+            stars.append({
+                'name': name, 'q': q, 'x': x, 'y': y, 'z': z, 'dly': dly,
+                'mag': float(r['mag']) if r['mag'] else 15.0,
+                'absmag': absmag, 'spect': r['spect'].strip(),
+                'con': r['con'].strip(),
+                'base': r['base'].strip() or r['id'],
+            })
+
+    # dedupe systems: brightest per base id, then 0.15 ly proximity merge
+    by_base = {}
+    for s in stars:
+        k = s['base']
+        if k not in by_base or s['mag'] < by_base[k]['mag']:
+            by_base[k] = s
+    merged = []
+    for s in sorted(by_base.values(), key=lambda s: s['dly']):
+        if any(abs(s['x']-t['x']) < 0.15 and abs(s['y']-t['y']) < 0.15 and
+               abs(s['z']-t['z']) < 0.15 for t in merged):
+            continue
         merged.append(s)
 
-def count_within(ly):
-    return sum(1 for s in merged if s['dly'] <= ly)
+    cat = [s for s in merged if s['dly'] <= NEAR_KEEP_LY or
+           s['absmag'] <= DIM_CAP_ABSMAG or s['q'] >= 2]
 
-print(f"raw rows within {MAX_LY:.0f} ly: {len(stars)}, systems after dedupe: {len(merged)}")
-for r_ in (25, 50, 80, 100, 125):
-    print(f"  systems within {r_:>3} ly: {count_within(r_)}")
+    # connectivity from Sol at 20 ly: drop anything the walk can never reach
+    HOP = 20.0
+    seen, frontier = set(), [(0.0, 0.0, 0.0)]
+    pts = [(s['x'], s['y'], s['z']) for s in cat]
+    while frontier:
+        cx, cy, cz = frontier.pop()
+        for i, (px, py, pz) in enumerate(pts):
+            if i in seen:
+                continue
+            if (px-cx)**2 + (py-cy)**2 + (pz-cz)**2 <= HOP*HOP:
+                seen.add(i)
+                frontier.append((px, py, pz))
+    stranded = len(cat) - len(seen)
+    if stranded:
+        cat = [s for i, s in enumerate(cat) if i in seen]
+        print(f"dropped {stranded} stars unreachable at {HOP} ly hops")
 
-named = [s for s in merged if s['q'] >= 2]
-print(f"proper/bayer-named systems: {len(named)} "
-      f"(proper only: {sum(1 for s in merged if s['q']==3)})")
+    cons = sorted({s['con'] for s in cat if s['con']})
+    con_idx = {c: i for i, c in enumerate(cons)}
+    assert len(cons) < 255
 
-# --- candidate catalog: everything within 100 ly, thinned beyond by brightness
-def build(radius, dim_absmag_cap, target_note):
-    cat = [s for s in merged if s['dly'] <= radius and
-           (s['dly'] <= 50 or s['absmag'] <= dim_absmag_cap or s['q'] >= 2)]
-    names_blob = sum(len(s['name']) + 1 for s in cat)
-    packed = len(cat) * 12 + names_blob
-    print(f"\n[{target_note}] radius {radius} ly, dim cap absmag {dim_absmag_cap}: "
-          f"{len(cat)} stars, ~{packed/1024:.1f} KB packed")
-    # connectivity from Sol
-    for hop in (15, 20, 25):
-        seen = set()
-        frontier = [(0.0, 0.0, 0.0)]
-        pts = [(s['x'], s['y'], s['z']) for s in cat]
-        idx_seen = set()
-        while frontier:
-            cx, cy, cz = frontier.pop()
-            for i, (px, py, pz) in enumerate(pts):
-                if i in idx_seen:
-                    continue
-                if (px-cx)**2 + (py-cy)**2 + (pz-cz)**2 <= hop*hop:
-                    idx_seen.add(i)
-                    frontier.append((px, py, pz))
-        print(f"    hop {hop} ly: reachable from Sol {len(idx_seen)}/{len(cat)} "
-              f"({100*len(idx_seen)/len(cat):.0f}%)")
-    return cat
+    def spect_byte(sp):
+        cls = CLASSES.index(sp[0].upper()) if sp and sp[0].upper() in CLASSES \
+              else CLASSES.index('?')
+        sub = 5
+        for ch in sp[1:3]:
+            if ch.isdigit():
+                sub = int(ch)
+                break
+        return (cls << 4) | sub
 
-cat_a = build(100, 8.0, "A: 100ly bubble")
-cat_b = build(125, 6.5, "B: 125ly bubble")
+    names_blob = bytearray()
+    recs = bytearray()
+    for s in cat:
+        off = len(names_blob)
+        assert off < 65535
+        names_blob += s['name'].encode('latin-1', 'replace')[:23] + b'\0'
+        am4 = max(-128, min(127, round(s['absmag'] * 4)))
+        recs += struct.pack('<hhhHbBBB',
+                            round(s['x'] * 100), round(s['y'] * 100),
+                            round(s['z'] * 100), off, am4,
+                            spect_byte(s['spect']),
+                            con_idx.get(s['con'], 255), 0)
 
-# spectral mix of catalog A
-from collections import Counter
-mix = Counter(s['spect'] for s in cat_a)
-print("\ncatalog A spectral mix:", dict(mix.most_common(10)))
-print("catalog A sample names:",
-      [s['name'] for s in cat_a[:6]], '...',
-      [s['name'] for s in cat_a if s['q'] == 3][10:16])
+    blob = struct.pack('<H', len(cat)) + bytes(recs) + bytes(names_blob)
+    out_bin = os.path.join(ROOT, 'resources', 'data', 'stars.bin')
+    os.makedirs(os.path.dirname(out_bin), exist_ok=True)
+    with open(out_bin, 'wb') as f:
+        f.write(blob)
+
+    hdr = os.path.join(ROOT, 'src', 'c', 'catalog_gen.h')
+    with open(hdr, 'w') as f:
+        f.write("// Generated by tools/make_catalog.py — do not edit.\n")
+        f.write("#pragma once\n#include <pebble.h>\n\n")
+        f.write(f"#define CAT_COUNT {len(cat)}\n")
+        f.write("#define CAT_NAMES_OFF (2 + CAT_COUNT * 12)\n")
+        f.write(f'#define CAT_CLASSES "{CLASSES}"\n\n')
+        f.write("typedef struct __attribute__((packed)) {\n"
+                "  int16_t x, y, z;              // 0.01 ly, galactic\n"
+                "  uint16_t name_off;\n"
+                "  int8_t absmag4;               // absolute magnitude x4\n"
+                "  uint8_t spect;                // class nibble | subclass\n"
+                "  uint8_t con;                  // index into CAT_CONS, 0xFF none\n"
+                "  uint8_t reserved;\n"
+                "} StarRec;\n\n")
+        f.write(f"#define CAT_N_CONS {len(cons)}\n")
+        f.write("static const char CAT_CONS[CAT_N_CONS][4] = {\n  ")
+        f.write(', '.join(f'"{c}"' for c in cons))
+        f.write("\n};\n")
+
+    named = sum(1 for s in cat if s['q'] >= 2)
+    print(f"catalog: {len(cat)} systems, {len(blob)} bytes "
+          f"({len(recs)} records + {len(names_blob)} names)")
+    print(f"named (proper/Bayer): {named}; constellations: {len(cons)}")
+    print(f"wrote {out_bin}\nwrote {hdr}")
+
+
+if __name__ == '__main__':
+    main()

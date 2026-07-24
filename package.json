@@ -29,17 +29,13 @@
     "messageKeys": [
       "FaceMode",
       "Cadence",
-      "Dispatch",
+      "StartHour",
       "Cutscene",
-      "UpgradeStrategy",
-      "SeedMode",
-      "FixedSeed",
-      "ShowSignposts",
       "DateFormat",
       "LeadingZero",
       "ShowBattery",
       "ShowBT",
-      "VibeMode",
+      "HopVibe",
       "BTVibe",
       "TapInfo",
       "WeatherOn",
@@ -54,6 +50,11 @@
           "type": "bitmap",
           "name": "IMAGE_MENU_ICON",
           "file": "images/menu_icon.png"
+        },
+        {
+          "type": "raw",
+          "name": "STARS",
+          "file": "data/stars.bin"
         }
       ]
     }
