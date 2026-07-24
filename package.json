@@ -1,0 +1,61 @@
+{
+  "name": "solfarer",
+  "author": "thejambi",
+  "version": "0.1.0",
+  "keywords": [
+    "pebble-watchface"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Solfarer",
+    "uuid": "61a230ee-e6f2-49d7-9ee4-53a996ea2fe3",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "configurable"
+    ],
+    "messageKeys": [
+      "FaceMode",
+      "Cadence",
+      "Dispatch",
+      "Cutscene",
+      "UpgradeStrategy",
+      "SeedMode",
+      "FixedSeed",
+      "ShowSignposts",
+      "DateFormat",
+      "LeadingZero",
+      "ShowBattery",
+      "ShowBT",
+      "VibeMode",
+      "BTVibe",
+      "TapInfo",
+      "WeatherOn",
+      "WeatherLoc",
+      "WeatherUnit",
+      "WeatherTemp"
+    ],
+    "resources": {
+      "media": [
+        {
+          "menuIcon": true,
+          "type": "bitmap",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png"
+        }
+      ]
+    }
+  }
+}
