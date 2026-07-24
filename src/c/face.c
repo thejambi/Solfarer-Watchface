@@ -430,12 +430,34 @@ static void draw_map(GContext *ctx, GRect b) {
   int sel = board_sel(window, s_hour, s_min);
   int tgt = board_count(window) > 0 ? board_star(window, sel) : g_walk.cur;
 
-  // route first, under the dots
+  // Target screen position, clamped to the frame edge along the route
+  // bearing when the hop reaches past the viewport — computed up front so
+  // the route line stops at the marker instead of sailing into the chrome.
   int tx, ty, tz;
   star_pos01(tgt, &tx, &ty, &tz);
+  int tpx = SX(tx), tpy = SY(ty);
+  int fx = SX(curx), fy = SY(cury);
+  bool tclamped = false;
+  {
+    int xmin = area.origin.x + 5, xmax = area.origin.x + area.size.w - 6;
+    int ymin = area.origin.y + 5, ymax = area.origin.y + area.size.h - 6;
+    int dx = tpx - fx, dy = tpy - fy;
+    float t = 1.0f;
+    if (dx > 0 && tpx > xmax) { float u = (xmax - fx) / (float)dx; if (u < t) t = u; }
+    if (dx < 0 && tpx < xmin) { float u = (xmin - fx) / (float)dx; if (u < t) t = u; }
+    if (dy > 0 && tpy > ymax) { float u = (ymax - fy) / (float)dy; if (u < t) t = u; }
+    if (dy < 0 && tpy < ymin) { float u = (ymin - fy) / (float)dy; if (u < t) t = u; }
+    if (t < 1.0f) {
+      tclamped = true;
+      tpx = fx + (int)(dx * t);
+      tpy = fy + (int)(dy * t);
+    }
+  }
+
+  // route first, under the dots — to the clamped marker, never past it
   graphics_context_set_stroke_color(ctx, COL_GOLD);
   graphics_context_set_stroke_width(ctx, 2);
-  graphics_draw_line(ctx, GPoint(SX(curx), SY(cury)), GPoint(SX(tx), SY(ty)));
+  graphics_draw_line(ctx, GPoint(fx, fy), GPoint(tpx, tpy));
 
   // the neighborhood, in its true colors
   for (int i = 0; i < CAT_COUNT; i++) {
@@ -490,39 +512,22 @@ static void draw_map(GContext *ctx, GRect b) {
     }
   }
 
-  // the target, cyan and labeled — clamped to the frame edge along the
-  // route bearing when the hop reaches past the viewport (a square there,
-  // matching the signpost grammar: square = beyond the frame)
+  // the target marker at the (possibly clamped) route end — a square at the
+  // edge, matching the signpost grammar: square = beyond the frame
   if (tgt != g_walk.cur) {
-    int px = SX(tx), py = SY(ty);
-    int fx = SX(curx), fy = SY(cury);
-    int xmin = area.origin.x + 5, xmax = area.origin.x + area.size.w - 6;
-    int ymin = area.origin.y + 5, ymax = area.origin.y + area.size.h - 6;
-    bool clamped = false;
-    int dx = px - fx, dy = py - fy;
-    float t = 1.0f;
-    if (dx > 0 && px > xmax) { float u = (xmax - fx) / (float)dx; if (u < t) t = u; }
-    if (dx < 0 && px < xmin) { float u = (xmin - fx) / (float)dx; if (u < t) t = u; }
-    if (dy > 0 && py > ymax) { float u = (ymax - fy) / (float)dy; if (u < t) t = u; }
-    if (dy < 0 && py < ymin) { float u = (ymin - fy) / (float)dy; if (u < t) t = u; }
-    if (t < 1.0f) {
-      clamped = true;
-      px = fx + (int)(dx * t);
-      py = fy + (int)(dy * t);
-    }
     graphics_context_set_fill_color(ctx, COL_CYAN);
-    if (clamped)
-      graphics_fill_rect(ctx, GRect(px - 2, py - 2, 5, 5), 0, GCornerNone);
+    if (tclamped)
+      graphics_fill_rect(ctx, GRect(tpx - 2, tpy - 2, 5, 5), 0, GCornerNone);
     else
-      graphics_fill_circle(ctx, GPoint(px, py), 3);
+      graphics_fill_circle(ctx, GPoint(tpx, tpy), 3);
     char tn[STAR_NAME_MAX];
     star_name(tgt, tn, sizeof tn);
-    int lx = px < b.size.w / 2 ? px + 6 : px - 66;
-    int ly = py < area.origin.y + 14 ? py + 4 : py - 16;
+    int lx = tpx < b.size.w / 2 ? tpx + 6 : tpx - 66;
+    int ly = tpy < area.origin.y + 14 ? tpy + 4 : tpy - 16;
     graphics_context_set_text_color(ctx, COL_CYAN);
     graphics_draw_text(ctx, tn, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(lx, ly, 62, 16), GTextOverflowModeTrailingEllipsis,
-                       px < b.size.w / 2 ? GTextAlignmentLeft : GTextAlignmentRight, NULL);
+                       tpx < b.size.w / 2 ? GTextAlignmentLeft : GTextAlignmentRight, NULL);
   }
 
   // you are here — your star, in its true color, ringed gold
