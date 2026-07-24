@@ -98,7 +98,8 @@ module.exports = [
         type: 'toggle',
         messageKey: 'TapInfo',
         defaultValue: true,
-        label: 'Tap for star / health card'
+        label: 'Shake gesture',
+        description: 'Star mode: browse the neighbor stars (display only — the bell still flies its own pick). Health mode: pop the health card.'
       }
     ]
   },

@@ -53,6 +53,34 @@ static int cur_window(void) {
 }
 
 // ---------------------------------------------------------------------------
+// Shake-to-browse: a manual walk around the neighbor board. Display only —
+// the bell computes its own pick from its own wall time, so browsing can
+// never change where the ship actually flies.
+// ---------------------------------------------------------------------------
+#define BROWSE_HOLD_S 30
+static int s_browse = -1;            // manual board index, -1 = follow minutes
+static time_t s_browse_at;
+
+static bool browsing(void) {
+  if (s_browse < 0) return false;
+  if (time(NULL) - s_browse_at > BROWSE_HOLD_S) {
+    s_browse = -1;
+    return false;
+  }
+  return true;
+}
+
+static int active_sel(int window) {
+  if (browsing()) {
+    int n = board_count(window);
+    return n > 0 ? s_browse % n : 0;
+  }
+  return board_sel(window, s_hour, s_min);
+}
+
+static void browse_reset(void) { s_browse = -1; }
+
+// ---------------------------------------------------------------------------
 // Health — the health-stats mode trades star chrome for the body's own.
 // Same machinery as the Lighthaul watchface (see its README for the three
 // ActiveHour lessons baked into the minute-history handling).
@@ -248,6 +276,7 @@ static void enter_flight(void) {
 }
 
 void face_show_hop(void) {
+  browse_reset();                  // new port, new board — follow the minutes
   if (g_cfg.hop_vibe && !quiet_time_is_active()) vibes_short_pulse();
   if (!s_layer) return;
   if (g_cfg.cutscene == CUT_FULL) enter_flight();
@@ -255,6 +284,7 @@ void face_show_hop(void) {
 }
 
 void face_show_summary(void) {
+  browse_reset();
   if (!s_layer) return;
   enter_card(MODE_SUMMARY, SUMMARY_MS);
 }
@@ -427,7 +457,7 @@ static void draw_map(GContext *ctx, GRect b) {
   #define SY(py01) (my - (int)((int32_t)((py01) - vcy) * span / VIEW_01))
 
   int window = cur_window();
-  int sel = board_sel(window, s_hour, s_min);
+  int sel = active_sel(window);
   int tgt = board_count(window) > 0 ? board_star(window, sel) : g_walk.cur;
 
   // Target screen position, clamped to the frame edge along the route
@@ -569,7 +599,7 @@ static void draw_map(GContext *ctx, GRect b) {
 
   char tn[STAR_NAME_MAX];
   star_name(tgt, tn, sizeof tn);
-  snprintf(buf, sizeof buf, "> %s", tn);
+  snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, buf,
                      fonts_get_system_font(compact || round ? FONT_KEY_GOTHIC_14_BOLD
@@ -910,8 +940,21 @@ static void tick_handler(struct tm *t, TimeUnits changed) {
 
 static void tap_handler(AccelAxisType axis, int32_t dir) {
   if (!g_cfg.tap_info) return;
-  if (s_mode == MODE_MAP) enter_card(MODE_INFO, INFO_MS);
-  else if (s_mode == MODE_INFO) { cancel_timer(); back_to_map(NULL); }
+  if (health_mode()) {             // health mode: shake pops the health card
+    if (s_mode == MODE_MAP) enter_card(MODE_INFO, INFO_MS);
+    else if (s_mode == MODE_INFO) { cancel_timer(); back_to_map(NULL); }
+    return;
+  }
+  // star mode: shake browses the neighbor board — display only, the bell's
+  // pick is untouched
+  if (s_mode != MODE_MAP) return;
+  int window = cur_window();
+  int n = board_count(window);
+  if (n < 1) return;
+  int cur = browsing() ? s_browse % n : board_sel(window, s_hour, s_min);
+  s_browse = (cur + 1) % n;
+  s_browse_at = time(NULL);
+  if (s_layer) layer_mark_dirty(s_layer);
 }
 
 static void bt_handler(bool connected) {
