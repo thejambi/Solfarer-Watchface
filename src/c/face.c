@@ -9,13 +9,12 @@
 // every minute; on the bell the ship flies it — twin paradox and all. One
 // window, five draw-states; scenes time themselves out.
 
-typedef enum { MODE_MAP, MODE_FLIGHT, MODE_ARRIVE, MODE_SUMMARY, MODE_INFO } Mode;
+typedef enum { MODE_MAP, MODE_FLIGHT, MODE_ARRIVE, MODE_SUMMARY } Mode;
 
 #define FLIGHT_MS 4200
 #define FLIGHT_TICK_MS 50
 #define ARRIVE_MS 7000
 #define SUMMARY_MS 10000
-#define INFO_MS 6000
 #define N_STARS_BG 26
 #define VIEW_01 4000                   // viewport width: 40 ly
 #define SLAB_01 1200                   // draw stars within ±12 ly of our depth
@@ -79,6 +78,23 @@ static int active_sel(int window) {
 }
 
 static void browse_reset(void) { s_browse = -1; }
+
+// Health mode's shake: no card — the stats line's kcal swaps to hours slept
+// for a few seconds (sleep is the only figure the face doesn't already show).
+#define SLEEP_PEEK_MS 6000
+static time_t s_sleep_peek_at;
+static AppTimer *s_peek_timer;
+
+static bool sleep_peek(void) {
+  return s_sleep_peek_at != 0 &&
+         time(NULL) - s_sleep_peek_at < SLEEP_PEEK_MS / 1000;
+}
+
+static void peek_expire(void *ctx) {
+  s_peek_timer = NULL;
+  s_sleep_peek_at = 0;
+  face_poke();
+}
 
 // ---------------------------------------------------------------------------
 // Health — the health-stats mode trades star chrome for the body's own.
@@ -620,10 +636,18 @@ static void draw_map(GContext *ctx, GRect b) {
     char st[16], km[16];
     fmt_thousands(st, sizeof st, steps_today());
     fmt1(km, sizeof km, walked_m_today() / 1000.0);
-    if (round || compact)
+    int ss = sleep_peek() ? sleep_secs() : 0;
+    if (ss > 0) {                    // shake: kcal's slot shows the night
+      unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
+      if (round || compact)
+        snprintf(buf, sizeof buf, "%s steps  %uh%02um", st, hh, mm);
+      else
+        snprintf(buf, sizeof buf, "%s steps  %skm  %uh%02um", st, km, hh, mm);
+    } else if (round || compact) {
       snprintf(buf, sizeof buf, "%s steps  %skm", st, km);
-    else
+    } else {
       snprintf(buf, sizeof buf, "%s steps  %skm  %dkcal", st, km, kcal_today());
+    }
     graphics_context_set_text_color(ctx, COL_GOOD);
   } else {
     double tu, ts, beta, gamma;
@@ -822,90 +846,6 @@ static void draw_summary(GContext *ctx, GRect b) {
 }
 
 // ---------------------------------------------------------------------------
-// INFO — tap: the current star's card (or the health card), boxed on the map
-// ---------------------------------------------------------------------------
-static void draw_info_overlay(GContext *ctx, GRect b) {
-  bool round = IS_ROUND, compact = IS_COMPACT(b);
-  int top_h, bot_h, inset;
-  chrome_metrics(b, &top_h, &bot_h, &inset);
-  GRect box = GRect(inset + 2, top_h + 2,
-                    b.size.w - 2 * (inset + 2), b.size.h - top_h - bot_h - 4);
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, box, 0, GCornerNone);
-  graphics_context_set_stroke_color(ctx, COL_FAINT);
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_rect(ctx, box);
-
-  s_x0 = box.origin.x + 5;
-  s_w = box.size.w - 10;
-  int y = box.origin.y - 2;
-  int lh = 14;
-  bool tall = !compact;
-  const char *hdr_font = round ? FONT_KEY_GOTHIC_14_BOLD : FONT_KEY_GOTHIC_18_BOLD;
-  int hdr_h = round ? 16 : 20;
-  char buf[96], t1[20], t2[20];
-
-  if (health_mode()) {
-    fmt_thousands(t1, sizeof t1, steps_today());
-    snprintf(buf, sizeof buf, "%s steps today", t1);
-    line(ctx, &y, buf, COL_GOLD, hdr_font, hdr_h);
-    fmt1(t1, sizeof t1, walked_m_today() / 1000.0);
-    snprintf(buf, sizeof buf, "%s km   %d kcal", t1, kcal_today());
-    line(ctx, &y, buf, GColorWhite, FONT_KEY_GOTHIC_14, lh);
-    int hr = hr_bpm();
-    if (hr > 0) {
-      snprintf(buf, sizeof buf, "heart %d bpm", hr);
-      line(ctx, &y, buf, GColorWhite, FONT_KEY_GOTHIC_14, lh);
-    }
-    int ss = sleep_secs();
-    if (ss > 0) {
-      unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-      snprintf(buf, sizeof buf, "slept %uh %02um", hh, mm);
-      line(ctx, &y, buf, GColorWhite, FONT_KEY_GOTHIC_14, lh);
-    }
-    if (tall) {
-      char nm[STAR_NAME_MAX];
-      star_name(g_walk.cur, nm, sizeof nm);
-      snprintf(buf, sizeof buf, "docked at %s", nm);
-      line(ctx, &y, buf, COL_FAINT, FONT_KEY_GOTHIC_14, lh);
-    }
-    return;
-  }
-
-  char nm[STAR_NAME_MAX];
-  star_name(g_walk.cur, nm, sizeof nm);
-  line(ctx, &y, nm, COL_GOLD, hdr_font, hdr_h);
-  const char *con = star_con3(g_walk.cur);
-  snprintf(buf, sizeof buf, "%c%d %s%s%s", star_class(g_walk.cur),
-           star_subclass(g_walk.cur), star_class_desc(g_walk.cur),
-           con ? " in " : "", con ? con : "");
-  line(ctx, &y, buf, GColorWhite, FONT_KEY_GOTHIC_14, lh);
-  fmt1(t1, sizeof t1, star_dist_sol_ly(g_walk.cur));
-  if (tall) {
-    fmt1(t2, sizeof t2, star_absmag(g_walk.cur));
-    snprintf(buf, sizeof buf, "%s ly from Sol  absmag %s", t1, t2);
-  } else {
-    snprintf(buf, sizeof buf, "%s ly from Sol", t1);
-  }
-  line(ctx, &y, buf, GColorWhite, FONT_KEY_GOTHIC_14, lh);
-  fmt1(t1, sizeof t1, g_walk.path_ly10 / 10.0);
-  snprintf(buf, sizeof buf, "today %d hops, %s ly", g_walk.hops, t1);
-  line(ctx, &y, buf, COL_DIM, FONT_KEY_GOTHIC_14, lh);
-  if (tall) {
-    if (g_wrec.far_ever_ly10 > 0) {
-      fmt1(t1, sizeof t1, g_wrec.far_ever_ly10 / 10.0);
-      snprintf(buf, sizeof buf, "farthest ever %s ly", t1);
-      line(ctx, &y, buf, COL_DIM, FONT_KEY_GOTHIC_14, lh);
-    }
-    if (g_wrec.days > 0)
-      snprintf(buf, sizeof buf, "streak %d  day %d", g_walk.streak, g_wrec.days);
-    else
-      snprintf(buf, sizeof buf, "streak %d", g_walk.streak);
-    line(ctx, &y, buf, COL_FAINT, FONT_KEY_GOTHIC_14, lh);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Window plumbing
 // ---------------------------------------------------------------------------
 static void draw(Layer *layer, GContext *ctx) {
@@ -917,7 +857,6 @@ static void draw(Layer *layer, GContext *ctx) {
     case MODE_FLIGHT:  draw_flight(ctx, b); break;
     case MODE_ARRIVE:  draw_arrive(ctx, b); break;
     case MODE_SUMMARY: draw_summary(ctx, b); break;
-    case MODE_INFO:    draw_map(ctx, b); draw_info_overlay(ctx, b); break;
   }
 }
 
@@ -940,9 +879,12 @@ static void tick_handler(struct tm *t, TimeUnits changed) {
 
 static void tap_handler(AccelAxisType axis, int32_t dir) {
   if (!g_cfg.tap_info) return;
-  if (health_mode()) {             // health mode: shake pops the health card
-    if (s_mode == MODE_MAP) enter_card(MODE_INFO, INFO_MS);
-    else if (s_mode == MODE_INFO) { cancel_timer(); back_to_map(NULL); }
+  if (health_mode()) {             // health mode: peek the night's sleep
+    if (s_mode != MODE_MAP) return;
+    s_sleep_peek_at = time(NULL);
+    if (s_peek_timer) app_timer_cancel(s_peek_timer);
+    s_peek_timer = app_timer_register(SLEEP_PEEK_MS + 300, peek_expire, NULL);
+    if (s_layer) layer_mark_dirty(s_layer);
     return;
   }
   // star mode: shake browses the neighbor board — display only, the bell's
@@ -1004,6 +946,7 @@ void face_init(void) {
 
 void face_deinit(void) {
   cancel_timer();
+  if (s_peek_timer) { app_timer_cancel(s_peek_timer); s_peek_timer = NULL; }
   tick_timer_service_unsubscribe();
   accel_tap_service_unsubscribe();
   connection_service_unsubscribe();
