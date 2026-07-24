@@ -490,11 +490,31 @@ static void draw_map(GContext *ctx, GRect b) {
     }
   }
 
-  // the target, cyan and labeled
+  // the target, cyan and labeled — clamped to the frame edge along the
+  // route bearing when the hop reaches past the viewport (a square there,
+  // matching the signpost grammar: square = beyond the frame)
   if (tgt != g_walk.cur) {
     int px = SX(tx), py = SY(ty);
+    int fx = SX(curx), fy = SY(cury);
+    int xmin = area.origin.x + 5, xmax = area.origin.x + area.size.w - 6;
+    int ymin = area.origin.y + 5, ymax = area.origin.y + area.size.h - 6;
+    bool clamped = false;
+    int dx = px - fx, dy = py - fy;
+    float t = 1.0f;
+    if (dx > 0 && px > xmax) { float u = (xmax - fx) / (float)dx; if (u < t) t = u; }
+    if (dx < 0 && px < xmin) { float u = (xmin - fx) / (float)dx; if (u < t) t = u; }
+    if (dy > 0 && py > ymax) { float u = (ymax - fy) / (float)dy; if (u < t) t = u; }
+    if (dy < 0 && py < ymin) { float u = (ymin - fy) / (float)dy; if (u < t) t = u; }
+    if (t < 1.0f) {
+      clamped = true;
+      px = fx + (int)(dx * t);
+      py = fy + (int)(dy * t);
+    }
     graphics_context_set_fill_color(ctx, COL_CYAN);
-    graphics_fill_circle(ctx, GPoint(px, py), 3);
+    if (clamped)
+      graphics_fill_rect(ctx, GRect(px - 2, py - 2, 5, 5), 0, GCornerNone);
+    else
+      graphics_fill_circle(ctx, GPoint(px, py), 3);
     char tn[STAR_NAME_MAX];
     star_name(tgt, tn, sizeof tn);
     int lx = px < b.size.w / 2 ? px + 6 : px - 66;
@@ -837,10 +857,15 @@ static void draw_info_overlay(GContext *ctx, GRect b) {
   snprintf(buf, sizeof buf, "today %d hops, %s ly", g_walk.hops, t1);
   line(ctx, &y, buf, COL_DIM, FONT_KEY_GOTHIC_14, lh);
   if (tall) {
-    fmt1(t1, sizeof t1, g_wrec.far_ever_ly10 / 10.0);
-    snprintf(buf, sizeof buf, "farthest ever %s ly", t1);
-    line(ctx, &y, buf, COL_DIM, FONT_KEY_GOTHIC_14, lh);
-    snprintf(buf, sizeof buf, "streak %d  day %d", g_walk.streak, g_wrec.days);
+    if (g_wrec.far_ever_ly10 > 0) {
+      fmt1(t1, sizeof t1, g_wrec.far_ever_ly10 / 10.0);
+      snprintf(buf, sizeof buf, "farthest ever %s ly", t1);
+      line(ctx, &y, buf, COL_DIM, FONT_KEY_GOTHIC_14, lh);
+    }
+    if (g_wrec.days > 0)
+      snprintf(buf, sizeof buf, "streak %d  day %d", g_walk.streak, g_wrec.days);
+    else
+      snprintf(buf, sizeof buf, "streak %d", g_walk.streak);
     line(ctx, &y, buf, COL_FAINT, FONT_KEY_GOTHIC_14, lh);
   }
 }
