@@ -19,7 +19,6 @@ typedef struct {
   bool leading_zero, show_battery, show_bt;
   bool hop_vibe, bt_vibe, tap_info;
   bool weather_on;
-  bool feature_steps;            // big step count between the time and date
 } Settings;
 
 extern Settings g_cfg;

@@ -345,7 +345,9 @@ static void chrome_metrics(GRect b, int *top_h, int *bot_h, int *inset) {
   *top_h = round ? 48 : (compact ? 50 : 56);   // tall rects: clock rides the top
   *bot_h = round ? 62 : (compact ? 36 : 50);
   *inset = round ? 24 : 0;
-  if (health_mode()) *top_h += (round || compact) ? 8 : 4;
+  // tall rects carry health in the corner grid, no extra line — only the
+  // small screens still pay for one above the sparkline
+  if (health_mode() && (round || compact)) *top_h += 8;
 }
 
 // Seeded per-(star, day) framing jitter: you're never dead-center, and a
@@ -383,73 +385,113 @@ static void draw_map(GContext *ctx, GRect b) {
                                                      : FONT_KEY_LECO_36_BOLD_NUMBERS),
                        GRect(2, compact ? -2 : -6, b.size.w - 46, compact ? 34 : 38),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    if (g_cfg.date_format != DATE_OFF) {
-      const char *l1 = g_cfg.date_format == DATE_DAYNUM ? WD[s_wday] : MO[s_mon];
-      snprintf(buf, sizeof buf, "%d", s_mday);
-      graphics_context_set_text_color(ctx, COL_DIM);
-      graphics_draw_text(ctx, l1, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         GRect(b.size.w - 44, compact ? -3 : 0, 40, 16),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
-      graphics_context_set_text_color(ctx, GColorWhite);
-      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                         GRect(b.size.w - 44, compact ? 10 : 14, 40, 20),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
-    }
-    if (g_cfg.feature_steps && !compact) {
-      // the featured step count lives in the gap between the time and the
-      // date — sized to whatever the actual time string leaves free
-      GSize tmsz = graphics_text_layout_get_content_size(t1,
-          fonts_get_system_font(FONT_KEY_LECO_36_BOLD_NUMBERS),
-          GRect(0, 0, b.size.w, 40), GTextOverflowModeTrailingEllipsis,
-          GTextAlignmentLeft);
-      int x0 = 2 + tmsz.w + 5;
-      int x1 = g_cfg.date_format != DATE_OFF ? b.size.w - 48 : b.size.w - 4;
-      char st[12];
-      fmt_thousands(st, sizeof st, steps_today());
-      GFont fs = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-      GSize ssz = graphics_text_layout_get_content_size(st, fs,
-          GRect(0, 0, b.size.w, 22), GTextOverflowModeTrailingEllipsis,
-          GTextAlignmentLeft);
-      if (ssz.w > x1 - x0) {           // tight gap (leading-zero times): step down
-        fs = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-        ssz = graphics_text_layout_get_content_size(st, fs,
-            GRect(0, 0, b.size.w, 22), GTextOverflowModeTrailingEllipsis,
-            GTextAlignmentLeft);
+    if (compact) {
+      if (g_cfg.date_format != DATE_OFF) {
+        const char *l1 = g_cfg.date_format == DATE_DAYNUM ? WD[s_wday] : MO[s_mon];
+        snprintf(buf, sizeof buf, "%d", s_mday);
+        graphics_context_set_text_color(ctx, COL_DIM);
+        graphics_draw_text(ctx, l1, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                           GRect(b.size.w - 44, -3, 40, 16),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        graphics_context_set_text_color(ctx, GColorWhite);
+        graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                           GRect(b.size.w - 44, 10, 40, 20),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
       }
-      if (ssz.w > x1 - x0)             // still tight: lose the comma
-        snprintf(st, sizeof st, "%d", steps_today());
-      graphics_context_set_text_color(ctx, COL_GOOD);
-      graphics_draw_text(ctx, st, fs, GRect(x0, 4, x1 - x0, 22),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+    } else {
+      // --- the corner grid: three health rows facing three day rows across
+      // a hairline —  999 stp | SAT  /  1.2 km | 25  /  72 bpm | 74°.
+      // Row one is bold on both sides; health stays green, day keeps its
+      // colors. The bpm row shows the night's sleep while the peek holds.
+      GFont f14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+      GFont f14b = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+      int day_w = 30, day_x = b.size.w - day_w - 2;
+      int sep_x = day_x - 5;
+      int r0 = -1, r1 = 13, r2 = 27;
+      if (g_cfg.date_format != DATE_OFF) {
+        const char *l1 = g_cfg.date_format == DATE_DAYNUM ? WD[s_wday] : MO[s_mon];
+        graphics_context_set_text_color(ctx, COL_DIM);
+        graphics_draw_text(ctx, l1, f14b, GRect(day_x, r0, day_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        snprintf(buf, sizeof buf, "%d", s_mday);
+        graphics_context_set_text_color(ctx, GColorWhite);
+        graphics_draw_text(ctx, buf, f14, GRect(day_x, r1, day_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      }
+      if (temp_fresh()) {
+        snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
+        graphics_context_set_text_color(ctx, COL_DIM);
+        graphics_draw_text(ctx, buf, f14, GRect(day_x, r2, day_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      }
+      if (health_mode()) {
+        graphics_context_set_stroke_color(ctx, COL_FAINT);
+        graphics_context_set_stroke_width(ctx, 1);
+        graphics_draw_line(ctx, GPoint(sep_x, 3), GPoint(sep_x, 44));
+        int unit_w = 26, unit_x = sep_x - 4 - unit_w;
+        int num_r = unit_x - 3;
+        GSize tmsz = graphics_text_layout_get_content_size(t1,
+            fonts_get_system_font(FONT_KEY_LECO_36_BOLD_NUMBERS),
+            GRect(0, 0, b.size.w, 40), GTextOverflowModeTrailingEllipsis,
+            GTextAlignmentLeft);
+        int num_x = 2 + tmsz.w + 4;
+        int num_w = num_r - num_x;
+        if (num_w < 12) num_w = 12;
+        graphics_context_set_text_color(ctx, COL_GOOD);
+        char v[16];
+        fmt_thousands(v, sizeof v, steps_today());
+        GSize ssz = graphics_text_layout_get_content_size(v, f14b,
+            GRect(0, 0, b.size.w, 18), GTextOverflowModeTrailingEllipsis,
+            GTextAlignmentLeft);
+        if (ssz.w > num_w)               // tight gap: the comma goes first
+          snprintf(v, sizeof v, "%d", steps_today());
+        graphics_draw_text(ctx, v, f14b, GRect(num_x, r0, num_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        graphics_draw_text(ctx, "stp", f14, GRect(unit_x, r0, unit_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+        fmt1(v, sizeof v, walked_m_today() / 1000.0);
+        graphics_draw_text(ctx, v, f14, GRect(num_x, r1, num_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        graphics_draw_text(ctx, "km", f14, GRect(unit_x, r1, unit_w, 18),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+        int ss = sleep_peek() ? sleep_secs() : 0;
+        if (ss > 0) {                    // the shake peek: sleep rides bpm's row
+          unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
+          snprintf(v, sizeof v, "%uh%02um", hh, mm);
+          graphics_draw_text(ctx, v, f14, GRect(num_x, r2, sep_x - 4 - num_x, 18),
+                             GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        } else {
+          int hr = hr_bpm();
+          if (hr > 0) {
+            snprintf(v, sizeof v, "%d", hr);
+            graphics_draw_text(ctx, v, f14, GRect(num_x, r2, num_w, 18),
+                               GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+            graphics_draw_text(ctx, "bpm", f14, GRect(unit_x, r2, unit_w, 18),
+                               GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+          }
+        }
+      }
     }
   }
 
-  // --- above the gauge: the body's line (health mode) or your position.
-  // Health mode: personal values left in green; the temperature far right in
-  // gray, stacked under the date — day values together. Sleep needs no slot
-  // of its own: the shake peek swaps it in where kcal sits.
+  // --- above the gauge: the small screens' health line (tall rects carry
+  // health in the corner grid instead), or star mode's wander tally. Sleep
+  // needs no slot of its own: the shake peek rides where bpm sits.
   int gh = health_mode() ? 10 : 2;
   int vy = top_h - 16 - gh;
-  if (health_mode()) {
-    char st[16], km[16], kc[16];
+  if (health_mode() && (round || compact)) {
+    char st[16], km[16], tail[16] = "";
     fmt_thousands(st, sizeof st, steps_today());
     fmt1(km, sizeof km, walked_m_today() / 1000.0);
     int ss = sleep_peek() ? sleep_secs() : 0;
     if (ss > 0) {
       unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-      snprintf(kc, sizeof kc, "%uh%02um", hh, mm);
+      snprintf(tail, sizeof tail, " %uh%02um", hh, mm);
     } else {
-      snprintf(kc, sizeof kc, "%dkcal", kcal_today());
+      int hr = hr_bpm();
+      if (hr > 0) snprintf(tail, sizeof tail, " %dbpm", hr);
     }
-    int hr = hr_bpm();
-    // featured up top? then the line doesn't repeat the step count
-    char pre[16] = "";
-    if (!(g_cfg.feature_steps && !round && !compact))
-      snprintf(pre, sizeof pre, "%s ", st);
-    if (hr > 0)
-      snprintf(buf, sizeof buf, "%s%skm %s %dbpm", pre, km, kc, hr);
-    else
-      snprintf(buf, sizeof buf, "%s%skm %s", pre, km, kc);
+    snprintf(buf, sizeof buf, "%s steps %skm%s", st, km, tail);
     graphics_context_set_text_color(ctx, COL_GOOD);
     if (round) {
       graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
@@ -468,7 +510,7 @@ static void draw_map(GContext *ctx, GRect b) {
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
       }
     }
-  } else {
+  } else if (!health_mode()) {
     // the bottom panel owns the station identity now — this line carries
     // the day's wander instead
     fmt1(t1, sizeof t1, g_walk.path_ly10 / 10.0);
@@ -796,7 +838,7 @@ static void draw_map(GContext *ctx, GRect b) {
 
     // --- L2: the target — marker in the prefix column, name aligned with L1
     int l2 = y + 14;
-    int tw = !health_mode() && temp_fresh() ? 34 : 0;
+    int tw = !health_mode() && temp_fresh() && compact ? 34 : 0;
     graphics_context_set_text_color(ctx, GColorWhite);
     graphics_draw_text(ctx, browsing() ? ">>" : ">", fbold,
                        GRect(px_, l2, 40, 20),
