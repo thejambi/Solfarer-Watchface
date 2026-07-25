@@ -42,6 +42,9 @@ void scheduler_boot(void) {
   uint32_t day; int slot, min;
   wander_now(&day, &slot, &min);
   bool had = walk_load();
+  APP_LOG(APP_LOG_LEVEL_INFO, "boot: had=%d day=%lu key=%lu slot=%d last=%d cur=%d cad=%d/%d",
+          (int)had, (unsigned long)day, (unsigned long)g_walk.day_key, slot,
+          g_walk.last_slot, g_walk.cur, g_walk.cadence, g_cfg.cadence);
   if (g_walk.cadence != g_cfg.cadence) {   // counted in old units: skip to now
     g_walk.last_slot = slot;
     g_walk.cadence = g_cfg.cadence;
@@ -54,6 +57,8 @@ void scheduler_boot(void) {
     s_summary = true;                      // first glance shows the card
   }
   replay_to(slot);                         // the day so far, in an instant
+  APP_LOG(APP_LOG_LEVEL_INFO, "boot done: last=%d cur=%d hops=%d",
+          g_walk.last_slot, g_walk.cur, g_walk.hops);
 }
 
 SchedEvent scheduler_tick(struct tm *t) {
@@ -66,9 +71,11 @@ SchedEvent scheduler_tick(struct tm *t) {
     replay_to(slot);                       // usually just slot 0
     return SCHED_NEWDAY;
   }
-  if (slot < g_walk.last_slot) {           // clock set backwards: never re-run
-    g_walk.last_slot = slot;
-    walk_save();
+  if (slot < g_walk.last_slot) {
+    // Clock went backwards (DST fall-back, or transient emulator skew at
+    // boot). Flown slots STAY flown — clamping last_slot down re-armed them
+    // and every skew event minted phantom hops. The wander simply pauses
+    // until the clock catches back up to the high-water mark.
     return SCHED_IDLE;
   }
   if (slot == g_walk.last_slot) return SCHED_IDLE;

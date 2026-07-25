@@ -455,11 +455,15 @@ static void draw_map(GContext *ctx, GRect b) {
         graphics_draw_text(ctx, "km", f14, GRect(unit_x, r1, unit_w, 18),
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
         int ss = sleep_peek() ? sleep_secs() : 0;
-        if (ss > 0) {                    // the shake peek: sleep rides bpm's row
+        if (ss > 0) {
+          // the shake peek: sleep rides bpm's row in the SAME two columns —
+          // "7:42" as the number, "slp" as the unit — so nothing shifts
           unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-          snprintf(v, sizeof v, "%uh%02um", hh, mm);
-          graphics_draw_text(ctx, v, f14, GRect(num_x, r2, sep_x - 4 - num_x, 18),
+          snprintf(v, sizeof v, "%u:%02u", hh, mm);
+          graphics_draw_text(ctx, v, f14, GRect(num_x, r2, num_w, 18),
                              GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+          graphics_draw_text(ctx, "slp", f14, GRect(unit_x, r2, unit_w, 18),
+                             GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
         } else {
           int hr = hr_bpm();
           if (hr > 0) {
