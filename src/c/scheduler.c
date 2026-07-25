@@ -9,15 +9,22 @@ static bool s_summary;               // boot crossed a day: summary card owed
 // Wander time: shift the clock back by the start hour, and the wander day /
 // slot fall out of ordinary calendar math.
 // ---------------------------------------------------------------------------
+// DEV_FAST_BELLS: a hop every minute, no backlog — for emulator work only.
+//#define DEV_FAST_BELLS
+
 static void wander_now(uint32_t *day, int *slot, int *wall_min) {
   time_t t = time(NULL) - (time_t)g_cfg.start_hour * 3600;
   struct tm *w = localtime(&t);
   *day = (uint32_t)((w->tm_year + 1900) * 10000 + (w->tm_mon + 1) * 100 +
                     w->tm_mday);
+#ifdef DEV_FAST_BELLS
+  *slot = w->tm_hour * 60 + w->tm_min;
+#else
   if (g_cfg.cadence == CAD_HALF)
     *slot = w->tm_hour * 2 + (w->tm_min >= 30 ? 1 : 0);
   else
     *slot = w->tm_hour;
+#endif
   *wall_min = w->tm_min;             // minutes are unshifted by whole hours
 }
 
@@ -56,6 +63,9 @@ void scheduler_boot(void) {
     walk_new_day(day, consec);
     s_summary = true;                      // first glance shows the card
   }
+#ifdef DEV_FAST_BELLS
+  g_walk.last_slot = slot;                 // dev: no backlog, live hops only
+#endif
   replay_to(slot);                         // the day so far, in an instant
   APP_LOG(APP_LOG_LEVEL_INFO, "boot done: last=%d cur=%d hops=%d",
           g_walk.last_slot, g_walk.cur, g_walk.hops);
@@ -79,8 +89,12 @@ SchedEvent scheduler_tick(struct tm *t) {
     return SCHED_IDLE;
   }
   if (slot == g_walk.last_slot) return SCHED_IDLE;
+#ifdef DEV_FAST_BELLS
+  bool bell_now = true;
+#else
   bool bell_now = (g_cfg.cadence == CAD_HALF) ? (min == 0 || min == 30)
                                               : (min == 0);
+#endif
   if (slot - g_walk.last_slot == 1 && bell_now) {
     walk_hop_slot(++g_walk.last_slot);     // the bell, live on the wrist
     walk_save();
