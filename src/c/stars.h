@@ -18,4 +18,5 @@ char star_class(int i);                    // 'O','B','A','F','G','K','M','D','?
 int star_subclass(int i);                  // 0..9
 const char *star_class_desc(int i);        // "red dwarf", "yellow dwarf", ...
 const char *star_con3(int i);              // "Cen", NULL if none
+const char *star_con_full(int i);          // "Centaurus", NULL if none
 double star_absmag(int i);

@@ -60,6 +60,11 @@ const char *star_con3(int i) {
   return CAT_CONS[s_tab[i].con];
 }
 
+const char *star_con_full(int i) {
+  if (i < 0 || s_tab[i].con >= CAT_N_CONS) return NULL;
+  return CAT_CONS_FULL[s_tab[i].con];
+}
+
 double star_absmag(int i) {
   if (i < 0) return 4.83;
   return s_tab[i].absmag4 / 4.0;

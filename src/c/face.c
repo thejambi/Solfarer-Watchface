@@ -685,7 +685,7 @@ static void draw_map(GContext *ctx, GRect b) {
                        GRect(px_ + nsz.w + 6, y - 2, pw - nsz.w - 6, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-    // --- L2: the target's name (with the browse marker)
+    // --- L2: the target, name and data together — "> Deneb Algedi  16.9ly A5"
     int l2 = y + 13;
     int tw = !health_mode() && temp_fresh() ? 34 : 0;
     snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
@@ -695,28 +695,18 @@ static void draw_map(GContext *ctx, GRect b) {
     graphics_draw_text(ctx, buf, fbold, GRect(px_, l2, pw - tw, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     fmt1(t2, sizeof t2, td);
-    if (compact) {
-      // small rects: data rides the name line, no nature
-      snprintf(buf, sizeof buf, "%sly%s", t2, cls);
-      graphics_context_set_text_color(ctx, COL_GOOD);
-      graphics_draw_text(ctx, buf, freg,
-                         GRect(px_ + tsz.w + 6, l2, pw - tsz.w - 6 - tw, 20),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    } else {
-      // --- L3: distance + class in green, then the nature in gray
-      char gp[24];
-      snprintf(gp, sizeof gp, "%sly%s", t2, cls);
-      GSize gsz = graphics_text_layout_get_content_size(gp, freg,
-          GRect(0, 0, pw, 16), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-      graphics_context_set_text_color(ctx, COL_GOOD);
-      graphics_draw_text(ctx, gp, freg, GRect(px_, y + 29, pw, 16),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-      const char *con = star_con3(tgt);
-      if (con) snprintf(buf, sizeof buf, "%s in %s", star_class_desc(tgt), con);
+    snprintf(buf, sizeof buf, "%sly%s", t2, cls);
+    graphics_context_set_text_color(ctx, COL_GOOD);
+    graphics_draw_text(ctx, buf, freg,
+                       GRect(px_ + tsz.w + 6, l2, pw - tsz.w - 6 - tw, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    if (!compact) {
+      // --- L3: the target's nature, constellation spelled out in full
+      const char *conf = star_con_full(tgt);
+      if (conf) snprintf(buf, sizeof buf, "%s in %s", star_class_desc(tgt), conf);
       else snprintf(buf, sizeof buf, "%s", star_class_desc(tgt));
       graphics_context_set_text_color(ctx, COL_DIM);
-      graphics_draw_text(ctx, buf, freg,
-                         GRect(px_ + gsz.w + 8, y + 29, pw - gsz.w - 8, 16),
+      graphics_draw_text(ctx, buf, freg, GRect(px_, y + 29, pw, 16),
                          GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     }
     if (tw) {                        // star mode keeps the corner temperature
