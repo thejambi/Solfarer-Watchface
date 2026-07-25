@@ -525,6 +525,10 @@ static void draw_map(GContext *ctx, GRect b) {
       tpy = fy + (int)(dy * t);
     }
   }
+  // the target label rides its marker; known up front so the SOL label
+  // can dodge it
+  int tlx = tpx < b.size.w / 2 ? tpx + 6 : tpx - 66;
+  int tly = tpy < area.origin.y + 14 ? tpy + 4 : tpy - 16;
 
   // route first, under the dots — to the clamped marker, never past it
   graphics_context_set_stroke_color(ctx, COL_GOLD);
@@ -575,12 +579,43 @@ static void draw_map(GContext *ctx, GRect b) {
       }
       graphics_context_set_fill_color(ctx, COL_GOLD);
       graphics_fill_rect(ctx, GRect(ex - 2, ey - 2, 5, 5), 0, GCornerNone);
+      // The label dodges: four candidate spots around the square, scored
+      // against the frame, the route line (sampled), and the target's
+      // label — preferring the side that faces away from the route.
+      GRect cl = GRect(ex - 37, ey - 8, 32, 16);
+      GRect cr = GRect(ex + 6, ey - 8, 32, 16);
+      GRect ca = GRect(ex - 16, ey - 23, 32, 16);
+      GRect cb = GRect(ex - 16, ey + 7, 32, 16);
+      bool left_first = (fx + tpx) / 2 > ex;
+      GRect cands[4];
+      cands[0] = left_first ? cl : cr;
+      cands[1] = left_first ? cr : cl;
+      cands[2] = ca;
+      cands[3] = cb;
+      int besti = 0, best_score = 1 << 20;
+      for (int c = 0; c < 4; c++) {
+        GRect r = cands[c];
+        int score = c;                       // mild preference for early slots
+        if (r.origin.x < area.origin.x || r.origin.y < area.origin.y ||
+            r.origin.x + r.size.w > area.origin.x + area.size.w ||
+            r.origin.y + r.size.h > area.origin.y + area.size.h)
+          score += 1000;                     // off the map: last resort
+        if (tgt != g_walk.cur &&
+            !(r.origin.x + r.size.w < tlx || tlx + 62 < r.origin.x ||
+              r.origin.y + r.size.h < tly || tly + 16 < r.origin.y))
+          score += 200;                      // sits on the target's label
+        for (int k = 0; k <= 8; k++) {       // crosses the route line
+          int qx = fx + (tpx - fx) * k / 8, qy = fy + (tpy - fy) * k / 8;
+          if (qx >= r.origin.x && qx < r.origin.x + r.size.w &&
+              qy >= r.origin.y && qy < r.origin.y + r.size.h)
+            score += 25;
+        }
+        if (score < best_score) { best_score = score; besti = c; }
+      }
       graphics_context_set_text_color(ctx, COL_GOLD);
-      int lx = ex < mx ? ex + 5 : ex - 33;
-      int ly = ey < my ? ey + 2 : ey - 16;
       graphics_draw_text(ctx, "SOL", fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         GRect(lx, ly, 30, 16), GTextOverflowModeTrailingEllipsis,
-                         ex < mx ? GTextAlignmentLeft : GTextAlignmentRight, NULL);
+                         cands[besti], GTextOverflowModeTrailingEllipsis,
+                         GTextAlignmentCenter, NULL);
     }
   }
 
@@ -594,11 +629,9 @@ static void draw_map(GContext *ctx, GRect b) {
       graphics_fill_circle(ctx, GPoint(tpx, tpy), 3);
     char tn[STAR_NAME_MAX];
     star_name(tgt, tn, sizeof tn);
-    int lx = tpx < b.size.w / 2 ? tpx + 6 : tpx - 66;
-    int ly = tpy < area.origin.y + 14 ? tpy + 4 : tpy - 16;
     graphics_context_set_text_color(ctx, COL_CYAN);
     graphics_draw_text(ctx, tn, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(lx, ly, 62, 16), GTextOverflowModeTrailingEllipsis,
+                       GRect(tlx, tly, 62, 16), GTextOverflowModeTrailingEllipsis,
                        tpx < b.size.w / 2 ? GTextAlignmentLeft : GTextAlignmentRight, NULL);
   }
 
