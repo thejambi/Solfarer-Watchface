@@ -397,31 +397,56 @@ static void draw_map(GContext *ctx, GRect b) {
     }
   }
 
-  // --- vitals: where you are — and how far from home
-  char nm[STAR_NAME_MAX];
-  star_name(g_walk.cur, nm, sizeof nm);
+  // --- above the gauge: the body's line (health mode) or your position.
+  // Health mode: personal values left in green; the temperature far right in
+  // gray, stacked under the date — day values together. Sleep needs no slot
+  // of its own: the shake peek swaps it in where kcal sits.
   int gh = health_mode() ? 10 : 2;
+  int vy = top_h - 16 - gh;
   if (health_mode()) {
-    char sl[16] = "";
-    int ss = s_hour < 10 ? sleep_secs() : 0;
-#ifdef DEV_FAKE_HEALTH
-    ss = sleep_secs();
-#endif
+    char st[16], km[16], kc[16];
+    fmt_thousands(st, sizeof st, steps_today());
+    fmt1(km, sizeof km, walked_m_today() / 1000.0);
+    int ss = sleep_peek() ? sleep_secs() : 0;
     if (ss > 0) {
       unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-      snprintf(sl, sizeof sl, "  %uh%02um", hh, mm);
+      snprintf(kc, sizeof kc, "%uh%02um", hh, mm);
+    } else {
+      snprintf(kc, sizeof kc, "%dkcal", kcal_today());
     }
     int hr = hr_bpm();
-    if (hr > 0) snprintf(buf, sizeof buf, "@%s%s  %dbpm", nm, sl, hr);
-    else snprintf(buf, sizeof buf, "@%s%s", nm, sl);
+    if (hr > 0)
+      snprintf(buf, sizeof buf, "%s %skm %s %dbpm", st, km, kc, hr);
+    else
+      snprintf(buf, sizeof buf, "%s %skm %s", st, km, kc);
+    graphics_context_set_text_color(ctx, COL_GOOD);
+    if (round) {
+      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(inset, vy, b.size.w - 2 * inset, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+    } else {
+      int tw = temp_fresh() ? 36 : 0;
+      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(2, vy, b.size.w - 4 - tw, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      if (temp_fresh()) {
+        snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
+        graphics_context_set_text_color(ctx, COL_DIM);
+        graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                           GRect(b.size.w - 38, vy, 34, 16),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      }
+    }
   } else {
+    char nm[STAR_NAME_MAX];
+    star_name(g_walk.cur, nm, sizeof nm);
     fmt1(t1, sizeof t1, star_dist_sol_ly(g_walk.cur));
     snprintf(buf, sizeof buf, "@%s  %sly out", nm, t1);
+    graphics_context_set_text_color(ctx, COL_DIM);
+    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(inset, vy, b.size.w - 2 * inset, 16),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
-  graphics_context_set_text_color(ctx, COL_DIM);
-  graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(inset, top_h - 16 - gh, b.size.w - 2 * inset, 16),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
   // --- the gold strip: the day's hops so far, or the health sparkline
   int gx0 = round ? 40 : 2, gw = b.size.w - 2 * gx0;
@@ -604,72 +629,76 @@ static void draw_map(GContext *ctx, GRect b) {
     graphics_fill_rect(ctx, GRect(bx + 2, by + 2, s_batt / 10, 3), 0, GCornerNone);
   }
 
-  // --- bottom panel: the minute's neighbor
+  // --- bottom panel: where you are, and where the minute points. Two
+  // columns on rect screens — the @-station on the left, the target on the
+  // right, distances beneath each (uni/you live in the cutscene now).
   int y = b.size.h - bot_h;
   int px_ = round ? 26 : 4;
   int pw = b.size.w - 2 * px_;
-  GTextAlignment align = round ? GTextAlignmentCenter : GTextAlignmentLeft;
   graphics_context_set_stroke_color(ctx, COL_FAINT);
   graphics_context_set_stroke_width(ctx, 1);
   graphics_draw_line(ctx, GPoint(inset, y), GPoint(b.size.w - inset, y));
 
-  char tn[STAR_NAME_MAX];
+  char cn[STAR_NAME_MAX], tn[STAR_NAME_MAX], cls[8] = "";
+  star_name(g_walk.cur, cn, sizeof cn);
   star_name(tgt, tn, sizeof tn);
-  snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
-  graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, buf,
-                     fonts_get_system_font(compact || round ? FONT_KEY_GOTHIC_14_BOLD
-                                                            : FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(px_, y - 2, pw, 20), GTextOverflowModeTrailingEllipsis, align, NULL);
-  int l2 = y + (compact || round ? 13 : 17);
-  if (!compact && !round) {
-    const char *con = star_con3(tgt);
-    if (con) snprintf(buf, sizeof buf, "%s in %s", star_class_desc(tgt), con);
-    else snprintf(buf, sizeof buf, "%s", star_class_desc(tgt));
-    graphics_context_set_text_color(ctx, COL_DIM);
-    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(px_, l2, pw, 16), GTextOverflowModeTrailingEllipsis, align, NULL);
-    l2 += 16;
-  }
-  int pw2 = pw - (temp_fresh() && !round ? 30 : 0);
-  if (health_mode()) {
-    char st[16], km[16];
-    fmt_thousands(st, sizeof st, steps_today());
-    fmt1(km, sizeof km, walked_m_today() / 1000.0);
-    int ss = sleep_peek() ? sleep_secs() : 0;
-    if (ss > 0) {                    // shake: kcal's slot shows the night
-      unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-      if (round || compact)
-        snprintf(buf, sizeof buf, "%s steps  %uh%02um", st, hh, mm);
-      else
-        snprintf(buf, sizeof buf, "%s steps  %skm  %uh%02um", st, km, hh, mm);
-    } else if (round || compact) {
-      snprintf(buf, sizeof buf, "%s steps  %skm", st, km);
-    } else {
-      snprintf(buf, sizeof buf, "%s steps  %skm  %dkcal", st, km, kcal_today());
-    }
+  if (star_class(tgt) != '?')
+    snprintf(cls, sizeof cls, " %c%d", star_class(tgt), star_subclass(tgt));
+  float td = star_dist_ly(g_walk.cur, tgt);
+
+  if (round) {
+    snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
+    graphics_context_set_text_color(ctx, GColorWhite);
+    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(px_, y - 2, pw, 20), GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentCenter, NULL);
+    fmt1(t1, sizeof t1, td);
+    snprintf(buf, sizeof buf, "%sly%s", t1, cls);
     graphics_context_set_text_color(ctx, COL_GOOD);
+    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(px_, y + 13, pw, 16), GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentCenter, NULL);
   } else {
-    double tu, ts, beta, gamma;
-    float d = star_dist_ly(g_walk.cur, tgt);
-    hop_profile(d, &tu, &ts, &beta, &gamma);
-    fmt1(t1, sizeof t1, d);
-    fmt1(t2, sizeof t2, tu);
-    char t3[16], cls[8] = "";
-    fmt1(t3, sizeof t3, ts);
-    if (star_class(tgt) != '?')
-      snprintf(cls, sizeof cls, "%c%d  ", star_class(tgt), star_subclass(tgt));
-    snprintf(buf, sizeof buf, "%sly  %suni %s  you %s", t1, cls, t2, t3);
-    graphics_context_set_text_color(ctx, COL_GOOD);
-  }
-  graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(px_, l2, pw2, 16), GTextOverflowModeTrailingEllipsis, align, NULL);
-  if (temp_fresh() && !round) {
-    snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
+    int half = pw / 2;
+    snprintf(buf, sizeof buf, "@ %s", cn);
+    graphics_context_set_text_color(ctx, GColorWhite);
+    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(px_, y - 2, half - 4, 20), GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentLeft, NULL);
+    snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
+    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(px_ + half, y - 2, pw - half, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    int l2 = y + 13;
+    fmt1(t1, sizeof t1, star_dist_sol_ly(g_walk.cur));
+    snprintf(buf, sizeof buf, "Sol %sly", t1);
     graphics_context_set_text_color(ctx, COL_DIM);
     graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(b.size.w - 46, l2, 42, 16),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+                       GRect(px_, l2, half - 4, 16), GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentLeft, NULL);
+    int tw = !health_mode() && temp_fresh() ? 34 : 0;
+    fmt1(t2, sizeof t2, td);
+    snprintf(buf, sizeof buf, "%sly%s", t2, cls);
+    graphics_context_set_text_color(ctx, COL_GOOD);
+    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(px_ + half, l2, pw - half - tw, 16),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    if (tw) {
+      snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
+      graphics_context_set_text_color(ctx, COL_DIM);
+      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(b.size.w - 38, l2, 34, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+    }
+    if (!compact) {                  // the tall rects add the target's nature
+      const char *con = star_con3(tgt);
+      if (con) snprintf(buf, sizeof buf, "%s in %s", star_class_desc(tgt), con);
+      else snprintf(buf, sizeof buf, "%s", star_class_desc(tgt));
+      graphics_context_set_text_color(ctx, COL_DIM);
+      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(px_, y + 29, pw, 16), GTextOverflowModeTrailingEllipsis,
+                         GTextAlignmentLeft, NULL);
+    }
   }
   if (round) {
     char db[40] = "";
