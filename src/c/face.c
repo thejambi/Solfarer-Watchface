@@ -438,10 +438,11 @@ static void draw_map(GContext *ctx, GRect b) {
       }
     }
   } else {
-    char nm[STAR_NAME_MAX];
-    star_name(g_walk.cur, nm, sizeof nm);
-    fmt1(t1, sizeof t1, star_dist_sol_ly(g_walk.cur));
-    snprintf(buf, sizeof buf, "@%s  %sly out", nm, t1);
+    // the bottom panel owns the station identity now — this line carries
+    // the day's wander instead
+    fmt1(t1, sizeof t1, g_walk.path_ly10 / 10.0);
+    snprintf(buf, sizeof buf, "%d hop%s  %sly today", g_walk.hops,
+             g_walk.hops == 1 ? "" : "s", t1);
     graphics_context_set_text_color(ctx, COL_DIM);
     graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(inset, vy, b.size.w - 2 * inset, 16),
@@ -659,45 +660,70 @@ static void draw_map(GContext *ctx, GRect b) {
                        GRect(px_, y + 13, pw, 16), GTextOverflowModeTrailingEllipsis,
                        GTextAlignmentCenter, NULL);
   } else {
-    int half = pw / 2;
+    GFont fbold = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+    GFont freg = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+    // --- L1: the star you're at — name bold, then distance and nature
     snprintf(buf, sizeof buf, "@ %s", cn);
+    GSize nsz = graphics_text_layout_get_content_size(buf, fbold,
+        GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
     graphics_context_set_text_color(ctx, GColorWhite);
-    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(px_, y - 2, half - 4, 20), GTextOverflowModeTrailingEllipsis,
-                       GTextAlignmentLeft, NULL);
-    snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
-    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(px_ + half, y - 2, pw - half, 20),
+    graphics_draw_text(ctx, buf, fbold, GRect(px_, y - 2, pw, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    int l2 = y + 13;
-    fmt1(t1, sizeof t1, star_dist_sol_ly(g_walk.cur));
-    snprintf(buf, sizeof buf, "Sol %sly", t1);
-    graphics_context_set_text_color(ctx, COL_DIM);
-    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(px_, l2, half - 4, 16), GTextOverflowModeTrailingEllipsis,
-                       GTextAlignmentLeft, NULL);
-    int tw = !health_mode() && temp_fresh() ? 34 : 0;
-    fmt1(t2, sizeof t2, td);
-    snprintf(buf, sizeof buf, "%sly%s", t2, cls);
-    graphics_context_set_text_color(ctx, COL_GOOD);
-    graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(px_ + half, l2, pw - half - tw, 16),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    if (tw) {
-      snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
-      graphics_context_set_text_color(ctx, COL_DIM);
-      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         GRect(b.size.w - 38, l2, 34, 16),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+    char ccls[8] = "";
+    if (star_class(g_walk.cur) != '?')
+      snprintf(ccls, sizeof ccls, "%c%d ", star_class(g_walk.cur),
+               star_subclass(g_walk.cur));
+    if (g_walk.cur == STAR_SOL) {
+      snprintf(buf, sizeof buf, "home  %s%s", ccls, star_class_desc(g_walk.cur));
+    } else {
+      fmt1(t1, sizeof t1, star_dist_sol_ly(g_walk.cur));
+      snprintf(buf, sizeof buf, "%sly  %s%s", t1, ccls,
+               star_class_desc(g_walk.cur));
     }
-    if (!compact) {                  // the tall rects add the target's nature
+    graphics_context_set_text_color(ctx, COL_DIM);
+    graphics_draw_text(ctx, buf, freg,
+                       GRect(px_ + nsz.w + 6, y - 2, pw - nsz.w - 6, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+    // --- L2: the target's name (with the browse marker)
+    int l2 = y + 13;
+    int tw = !health_mode() && temp_fresh() ? 34 : 0;
+    snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
+    GSize tsz = graphics_text_layout_get_content_size(buf, fbold,
+        GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    graphics_context_set_text_color(ctx, GColorWhite);
+    graphics_draw_text(ctx, buf, fbold, GRect(px_, l2, pw - tw, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    fmt1(t2, sizeof t2, td);
+    if (compact) {
+      // small rects: data rides the name line, no nature
+      snprintf(buf, sizeof buf, "%sly%s", t2, cls);
+      graphics_context_set_text_color(ctx, COL_GOOD);
+      graphics_draw_text(ctx, buf, freg,
+                         GRect(px_ + tsz.w + 6, l2, pw - tsz.w - 6 - tw, 20),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    } else {
+      // --- L3: distance + class in green, then the nature in gray
+      char gp[24];
+      snprintf(gp, sizeof gp, "%sly%s", t2, cls);
+      GSize gsz = graphics_text_layout_get_content_size(gp, freg,
+          GRect(0, 0, pw, 16), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+      graphics_context_set_text_color(ctx, COL_GOOD);
+      graphics_draw_text(ctx, gp, freg, GRect(px_, y + 29, pw, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
       const char *con = star_con3(tgt);
       if (con) snprintf(buf, sizeof buf, "%s in %s", star_class_desc(tgt), con);
       else snprintf(buf, sizeof buf, "%s", star_class_desc(tgt));
       graphics_context_set_text_color(ctx, COL_DIM);
-      graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         GRect(px_, y + 29, pw, 16), GTextOverflowModeTrailingEllipsis,
-                         GTextAlignmentLeft, NULL);
+      graphics_draw_text(ctx, buf, freg,
+                         GRect(px_ + gsz.w + 8, y + 29, pw - gsz.w - 8, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
+    if (tw) {                        // star mode keeps the corner temperature
+      snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
+      graphics_context_set_text_color(ctx, COL_DIM);
+      graphics_draw_text(ctx, buf, freg, GRect(b.size.w - 38, l2, 34, 16),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
     }
   }
   if (round) {
