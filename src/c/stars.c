@@ -2,6 +2,7 @@
 
 static StarRec *s_tab;
 static ResHandle s_res;
+static size_t s_res_size;
 
 static const char *CLASS_DESC[] = {
   "blue giant", "blue-white star", "white star", "yellow-white star",
@@ -10,6 +11,7 @@ static const char *CLASS_DESC[] = {
 
 bool stars_load(void) {
   s_res = resource_get_handle(RESOURCE_ID_STARS);
+  s_res_size = resource_size(s_res);
   uint16_t n = 0;
   resource_load_byte_range(s_res, 0, (uint8_t *)&n, 2);
   if (n != CAT_COUNT) return false;        // resource/header mismatch
@@ -28,8 +30,12 @@ void star_name(int i, char *buf, size_t cap) {
     buf[cap - 1] = 0;
     return;
   }
-  size_t got = resource_load_byte_range(
-      s_res, CAT_NAMES_OFF + s_tab[i].name_off, (uint8_t *)buf, cap - 1);
+  // clamp the read to the resource end: an over-long request near the last
+  // names in the blob fails outright rather than reading short
+  uint32_t off = CAT_NAMES_OFF + s_tab[i].name_off;
+  size_t want = cap - 1;
+  if (off + want > s_res_size) want = off < s_res_size ? s_res_size - off : 0;
+  size_t got = want ? resource_load_byte_range(s_res, off, (uint8_t *)buf, want) : 0;
   buf[got] = 0;                            // blob is NUL-terminated within
 }
 

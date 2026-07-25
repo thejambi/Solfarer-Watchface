@@ -395,6 +395,33 @@ static void draw_map(GContext *ctx, GRect b) {
                          GRect(b.size.w - 44, compact ? 10 : 14, 40, 20),
                          GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
     }
+    if (g_cfg.feature_steps && !compact) {
+      // the featured step count lives in the gap between the time and the
+      // date — sized to whatever the actual time string leaves free
+      GSize tmsz = graphics_text_layout_get_content_size(t1,
+          fonts_get_system_font(FONT_KEY_LECO_36_BOLD_NUMBERS),
+          GRect(0, 0, b.size.w, 40), GTextOverflowModeTrailingEllipsis,
+          GTextAlignmentLeft);
+      int x0 = 2 + tmsz.w + 5;
+      int x1 = g_cfg.date_format != DATE_OFF ? b.size.w - 48 : b.size.w - 4;
+      char st[12];
+      fmt_thousands(st, sizeof st, steps_today());
+      GFont fs = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+      GSize ssz = graphics_text_layout_get_content_size(st, fs,
+          GRect(0, 0, b.size.w, 22), GTextOverflowModeTrailingEllipsis,
+          GTextAlignmentLeft);
+      if (ssz.w > x1 - x0) {           // tight gap (leading-zero times): step down
+        fs = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+        ssz = graphics_text_layout_get_content_size(st, fs,
+            GRect(0, 0, b.size.w, 22), GTextOverflowModeTrailingEllipsis,
+            GTextAlignmentLeft);
+      }
+      if (ssz.w > x1 - x0)             // still tight: lose the comma
+        snprintf(st, sizeof st, "%d", steps_today());
+      graphics_context_set_text_color(ctx, COL_GOOD);
+      graphics_draw_text(ctx, st, fs, GRect(x0, 8, x1 - x0, 22),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+    }
   }
 
   // --- above the gauge: the body's line (health mode) or your position.
@@ -541,8 +568,8 @@ static void draw_map(GContext *ctx, GRect b) {
     if (r->z - curz > SLAB_01 || curz - r->z > SLAB_01) continue;
     int px = SX(r->x), py = SY(r->y);
     if (px < area.origin.x - 4 || px > area.origin.x + area.size.w + 4 ||
-        py < area.origin.y - 4 || py > area.origin.y + area.size.h + 4)
-      continue;
+        py < area.origin.y + 2 || py > area.origin.y + area.size.h - 2)
+      continue;               // tight vertically: no bleed into the chrome
     if (i == g_walk.cur || i == tgt) continue;   // drawn on top below
     int rad = class_radius(i);
     graphics_context_set_fill_color(ctx, class_color(CAT_CLASSES[r->spect >> 4]));

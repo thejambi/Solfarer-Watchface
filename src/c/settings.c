@@ -17,6 +17,7 @@ static void defaults(void) {
   g_cfg.show_battery = true;
   g_cfg.show_bt = true;
   g_cfg.tap_info = true;
+  g_cfg.feature_steps = true;
 }
 
 // Clay sends selects as strings ("0","1",..) and toggles as small ints —
@@ -42,6 +43,7 @@ static void inbox(DictionaryIterator *it, void *ctx) {
   g_cfg.bt_vibe      = tup_int(it, MESSAGE_KEY_BTVibe, g_cfg.bt_vibe);
   g_cfg.tap_info     = tup_int(it, MESSAGE_KEY_TapInfo, g_cfg.tap_info);
   g_cfg.weather_on   = tup_int(it, MESSAGE_KEY_WeatherOn, g_cfg.weather_on);
+  g_cfg.feature_steps = tup_int(it, MESSAGE_KEY_FeatureSteps, g_cfg.feature_steps);
   Tuple *wt = dict_find(it, MESSAGE_KEY_WeatherTemp);   // phone-side fetch
   if (wt) face_set_temp((int)wt->value->int32);
   g_cfg.version = SETTINGS_VERSION;

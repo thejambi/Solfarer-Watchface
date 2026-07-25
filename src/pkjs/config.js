@@ -96,6 +96,13 @@ module.exports = [
       },
       {
         type: 'toggle',
+        messageKey: 'FeatureSteps',
+        defaultValue: true,
+        label: 'Feature step count',
+        description: 'Large step count between the time and the date (tall screens).'
+      },
+      {
+        type: 'toggle',
         messageKey: 'TapInfo',
         defaultValue: true,
         label: 'Shake gesture',
