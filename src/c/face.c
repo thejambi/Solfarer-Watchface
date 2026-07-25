@@ -552,10 +552,44 @@ static void draw_map(GContext *ctx, GRect b) {
       tpy = fy + (int)(dy * t);
     }
   }
-  // the target label rides its marker; known up front so the SOL label
-  // can dodge it
-  int tlx = tpx < b.size.w / 2 ? tpx + 6 : tpx - 66;
-  int tly = tpy < area.origin.y + 14 ? tpy + 4 : tpy - 16;
+  // The target label picks its spot around the marker — preferring the side
+  // opposite the current star so the name never sits on the route, falling
+  // back around the compass. Decided up front so SOL's label can dodge it.
+  GRect tl_rect;
+  GTextAlignment tl_align;
+  {
+    GRect cand[4];
+    GTextAlignment al[4];
+    bool right_first = fx <= tpx;          // route comes from the left → go right
+    cand[0] = right_first ? GRect(tpx + 6, tpy - 8, 62, 16)
+                          : GRect(tpx - 68, tpy - 8, 62, 16);
+    al[0] = right_first ? GTextAlignmentLeft : GTextAlignmentRight;
+    cand[1] = right_first ? GRect(tpx - 68, tpy - 8, 62, 16)
+                          : GRect(tpx + 6, tpy - 8, 62, 16);
+    al[1] = right_first ? GTextAlignmentRight : GTextAlignmentLeft;
+    cand[2] = GRect(tpx - 31, tpy - 20, 62, 16);
+    al[2] = GTextAlignmentCenter;
+    cand[3] = GRect(tpx - 31, tpy + 6, 62, 16);
+    al[3] = GTextAlignmentCenter;
+    int best = 0, best_score = 1 << 20;
+    for (int c = 0; c < 4; c++) {
+      GRect r = cand[c];
+      int score = c;
+      if (r.origin.x < area.origin.x - 2 || r.origin.y < area.origin.y ||
+          r.origin.x + r.size.w > area.origin.x + area.size.w + 2 ||
+          r.origin.y + r.size.h > area.origin.y + area.size.h)
+        score += 1000;
+      for (int k = 0; k <= 8; k++) {       // the route, sampled
+        int qx = fx + (tpx - fx) * k / 8, qy = fy + (tpy - fy) * k / 8;
+        if (qx >= r.origin.x && qx < r.origin.x + r.size.w &&
+            qy >= r.origin.y && qy < r.origin.y + r.size.h)
+          score += 25;
+      }
+      if (score < best_score) { best_score = score; best = c; }
+    }
+    tl_rect = cand[best];
+    tl_align = al[best];
+  }
 
   // route first, under the dots — to the clamped marker, never past it
   graphics_context_set_stroke_color(ctx, COL_GOLD);
@@ -628,8 +662,10 @@ static void draw_map(GContext *ctx, GRect b) {
             r.origin.y + r.size.h > area.origin.y + area.size.h)
           score += 1000;                     // off the map: last resort
         if (tgt != g_walk.cur &&
-            !(r.origin.x + r.size.w < tlx || tlx + 62 < r.origin.x ||
-              r.origin.y + r.size.h < tly || tly + 16 < r.origin.y))
+            !(r.origin.x + r.size.w < tl_rect.origin.x ||
+              tl_rect.origin.x + tl_rect.size.w < r.origin.x ||
+              r.origin.y + r.size.h < tl_rect.origin.y ||
+              tl_rect.origin.y + tl_rect.size.h < r.origin.y))
           score += 200;                      // sits on the target's label
         for (int k = 0; k <= 8; k++) {       // crosses the route line
           int qx = fx + (tpx - fx) * k / 8, qy = fy + (tpy - fy) * k / 8;
@@ -658,8 +694,7 @@ static void draw_map(GContext *ctx, GRect b) {
     star_name(tgt, tn, sizeof tn);
     graphics_context_set_text_color(ctx, COL_CYAN);
     graphics_draw_text(ctx, tn, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                       GRect(tlx, tly, 62, 16), GTextOverflowModeTrailingEllipsis,
-                       tpx < b.size.w / 2 ? GTextAlignmentLeft : GTextAlignmentRight, NULL);
+                       tl_rect, GTextOverflowModeTrailingEllipsis, tl_align, NULL);
   }
 
   // you are here — your star, in its true color, ringed gold
