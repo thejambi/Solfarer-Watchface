@@ -342,7 +342,7 @@ static int class_radius(int idx) {
 // ---------------------------------------------------------------------------
 static void chrome_metrics(GRect b, int *top_h, int *bot_h, int *inset) {
   bool round = IS_ROUND, compact = IS_COMPACT(b);
-  *top_h = round ? 48 : (compact ? 50 : 60);
+  *top_h = round ? 48 : (compact ? 50 : 56);   // tall rects: clock rides the top
   *bot_h = round ? 62 : (compact ? 36 : 50);
   *inset = round ? 24 : 0;
   if (health_mode()) *top_h += (round || compact) ? 8 : 4;
@@ -381,7 +381,7 @@ static void draw_map(GContext *ctx, GRect b) {
     graphics_draw_text(ctx, t1,
                        fonts_get_system_font(compact ? FONT_KEY_LECO_32_BOLD_NUMBERS
                                                      : FONT_KEY_LECO_36_BOLD_NUMBERS),
-                       GRect(2, -2, b.size.w - 46, compact ? 34 : 38),
+                       GRect(2, compact ? -2 : -6, b.size.w - 46, compact ? 34 : 38),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     if (g_cfg.date_format != DATE_OFF) {
       const char *l1 = g_cfg.date_format == DATE_DAYNUM ? WD[s_wday] : MO[s_mon];
@@ -419,8 +419,8 @@ static void draw_map(GContext *ctx, GRect b) {
       if (ssz.w > x1 - x0)             // still tight: lose the comma
         snprintf(st, sizeof st, "%d", steps_today());
       graphics_context_set_text_color(ctx, COL_GOOD);
-      graphics_draw_text(ctx, st, fs, GRect(x0, 8, x1 - x0, 22),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      graphics_draw_text(ctx, st, fs, GRect(x0, 4, x1 - x0, 22),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     }
   }
 
@@ -442,10 +442,14 @@ static void draw_map(GContext *ctx, GRect b) {
       snprintf(kc, sizeof kc, "%dkcal", kcal_today());
     }
     int hr = hr_bpm();
+    // featured up top? then the line doesn't repeat the step count
+    char pre[16] = "";
+    if (!(g_cfg.feature_steps && !round && !compact))
+      snprintf(pre, sizeof pre, "%s ", st);
     if (hr > 0)
-      snprintf(buf, sizeof buf, "%s %skm %s %dbpm", st, km, kc, hr);
+      snprintf(buf, sizeof buf, "%s%skm %s %dbpm", pre, km, kc, hr);
     else
-      snprintf(buf, sizeof buf, "%s %skm %s", st, km, kc);
+      snprintf(buf, sizeof buf, "%s%skm %s", pre, km, kc);
     graphics_context_set_text_color(ctx, COL_GOOD);
     if (round) {
       graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),
