@@ -706,11 +706,11 @@ static void draw_map(GContext *ctx, GRect b) {
 
     // --- L1: the star you're at — name bold, then distance and nature
     graphics_context_set_text_color(ctx, GColorWhite);
-    graphics_draw_text(ctx, "@", fbold, GRect(px_, y - 2, 40, 20),
+    graphics_draw_text(ctx, "@", fbold, GRect(px_, y - 1, 40, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     GSize nsz = graphics_text_layout_get_content_size(cn, fbold,
         GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-    graphics_draw_text(ctx, cn, fbold, GRect(name_x, y - 2, pw - (name_x - px_), 20),
+    graphics_draw_text(ctx, cn, fbold, GRect(name_x, y - 1, pw - (name_x - px_), 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     char ccls[8] = "";
     if (star_class(g_walk.cur) != '?')
@@ -725,11 +725,11 @@ static void draw_map(GContext *ctx, GRect b) {
     }
     graphics_context_set_text_color(ctx, COL_DIM);
     graphics_draw_text(ctx, buf, freg,
-                       GRect(name_x + nsz.w + 6, y - 2, pw - (name_x - px_) - nsz.w - 6, 20),
+                       GRect(name_x + nsz.w + 6, y - 1, pw - (name_x - px_) - nsz.w - 6, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
     // --- L2: the target — marker in the prefix column, name aligned with L1
-    int l2 = y + 13;
+    int l2 = y + 14;
     int tw = !health_mode() && temp_fresh() ? 34 : 0;
     graphics_context_set_text_color(ctx, GColorWhite);
     graphics_draw_text(ctx, browsing() ? ">>" : ">", fbold,
