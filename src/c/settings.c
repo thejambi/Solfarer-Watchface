@@ -9,7 +9,7 @@ static void (*s_cb)(bool resync);
 static void defaults(void) {
   memset(&g_cfg, 0, sizeof g_cfg);
   g_cfg.version = SETTINGS_VERSION;
-  g_cfg.face_mode = FMODE_STAR;
+  g_cfg.show_health = true;
   g_cfg.cadence = CAD_HOURLY;
   g_cfg.start_hour = 7;          // mornings begin at Sol
   g_cfg.cutscene = CUT_FULL;
@@ -30,7 +30,7 @@ static int tup_int(DictionaryIterator *it, uint32_t key, int fallback) {
 
 static void inbox(DictionaryIterator *it, void *ctx) {
   Settings old = g_cfg;
-  g_cfg.face_mode    = tup_int(it, MESSAGE_KEY_FaceMode, g_cfg.face_mode);
+  g_cfg.show_health  = tup_int(it, MESSAGE_KEY_ShowHealth, g_cfg.show_health);
   g_cfg.cadence      = tup_int(it, MESSAGE_KEY_Cadence, g_cfg.cadence);
   g_cfg.start_hour   = tup_int(it, MESSAGE_KEY_StartHour, g_cfg.start_hour) % 24;
   g_cfg.cutscene     = tup_int(it, MESSAGE_KEY_Cutscene, g_cfg.cutscene);

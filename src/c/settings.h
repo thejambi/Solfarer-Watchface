@@ -1,7 +1,6 @@
 #pragma once
 #include <pebble.h>
 
-enum { FMODE_STAR, FMODE_HEALTH };                      // what the chrome shows
 enum { CAD_HOURLY, CAD_HALF };                          // bell cadence
 enum { CUT_FULL, CUT_SILENT };                          // hop cutscene
 enum { DATE_DAYNUM, DATE_MONTHDAY, DATE_OFF };          // "FRI 24" / "JUL 24"
@@ -11,7 +10,7 @@ enum { DATE_DAYNUM, DATE_MONTHDAY, DATE_OFF };          // "FRI 24" / "JUL 24"
 #define SETTINGS_VERSION 1
 typedef struct {
   uint8_t version;
-  uint8_t face_mode;
+  uint8_t show_health;           // health corner + sparkline; off = pure chart
   uint8_t cadence;
   uint8_t start_hour;            // the wander day begins at Sol at this hour
   uint8_t cutscene;

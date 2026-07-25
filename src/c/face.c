@@ -44,7 +44,7 @@ static void fmt_time(char *buf, size_t cap) {
 
 static double ease(double t) { return t * t * (3 - 2 * t); }
 
-static bool health_mode(void) { return g_cfg.face_mode == FMODE_HEALTH; }
+static bool health_on(void) { return g_cfg.show_health; }
 
 static int cur_window(void) {
   int h = (s_hour - g_cfg.start_hour + 24) % 24;
@@ -347,7 +347,7 @@ static void chrome_metrics(GRect b, int *top_h, int *bot_h, int *inset) {
   *inset = round ? 24 : 0;
   // tall rects carry health in the corner grid, no extra line — only the
   // small screens still pay for one above the sparkline
-  if (health_mode() && (round || compact)) *top_h += 8;
+  if (health_on() && (round || compact)) *top_h += 8;
 }
 
 // Seeded per-(star, day) framing jitter: you're never dead-center, and a
@@ -383,7 +383,7 @@ static void draw_map(GContext *ctx, GRect b) {
     graphics_draw_text(ctx, t1,
                        fonts_get_system_font(compact ? FONT_KEY_LECO_32_BOLD_NUMBERS
                                                      : FONT_KEY_LECO_36_BOLD_NUMBERS),
-                       GRect(2, compact ? -2 : -6, b.size.w - 46, compact ? 34 : 38),
+                       GRect(2, compact ? -2 : 1, b.size.w - 46, compact ? 34 : 38),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     if (compact) {
       if (g_cfg.date_format != DATE_OFF) {
@@ -400,7 +400,7 @@ static void draw_map(GContext *ctx, GRect b) {
       }
     } else {
       // --- the corner grid: three health rows facing three day rows across
-      // a hairline —  999 stp | SAT  /  1.2 km | 25  /  72 bpm | 74°.
+      // a hairline —  705 | SAT  /  0.8 km | 25  /  68 bpm | 74°.
       // Row one is bold on both sides; health stays green, day keeps its
       // colors. The bpm row shows the night's sleep while the peek holds.
       GFont f14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
@@ -424,18 +424,18 @@ static void draw_map(GContext *ctx, GRect b) {
         graphics_draw_text(ctx, buf, f14, GRect(day_x, r2, day_w, 18),
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
       }
-      if (health_mode()) {
+      if (health_on()) {
         graphics_context_set_stroke_color(ctx, COL_FAINT);
         graphics_context_set_stroke_width(ctx, 1);
         graphics_draw_line(ctx, GPoint(sep_x, 3), GPoint(sep_x, 44));
-        int unit_w = 26, unit_x = sep_x - 4 - unit_w;
-        int num_r = unit_x - 3;
+        // every value flush right against the rule, unit riding along —
+        // steps drop their label: the longest number gets the room
         GSize tmsz = graphics_text_layout_get_content_size(t1,
             fonts_get_system_font(FONT_KEY_LECO_36_BOLD_NUMBERS),
             GRect(0, 0, b.size.w, 40), GTextOverflowModeTrailingEllipsis,
             GTextAlignmentLeft);
         int num_x = 2 + tmsz.w + 4;
-        int num_w = num_r - num_x;
+        int num_w = sep_x - 4 - num_x;
         if (num_w < 12) num_w = 12;
         graphics_context_set_text_color(ctx, COL_GOOD);
         char v[16];
@@ -447,31 +447,23 @@ static void draw_map(GContext *ctx, GRect b) {
           snprintf(v, sizeof v, "%d", steps_today());
         graphics_draw_text(ctx, v, f14b, GRect(num_x, r0, num_w, 18),
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
-        graphics_draw_text(ctx, "stp", f14, GRect(unit_x, r0, unit_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-        fmt1(v, sizeof v, walked_m_today() / 1000.0);
+        char km[12];
+        fmt1(km, sizeof km, walked_m_today() / 1000.0);
+        snprintf(v, sizeof v, "%s km", km);
         graphics_draw_text(ctx, v, f14, GRect(num_x, r1, num_w, 18),
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
-        graphics_draw_text(ctx, "km", f14, GRect(unit_x, r1, unit_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
         int ss = sleep_peek() ? sleep_secs() : 0;
-        if (ss > 0) {
-          // the shake peek: sleep rides bpm's row in the SAME two columns —
-          // "7:42" as the number, "slp" as the unit — so nothing shifts
+        if (ss > 0) {                    // the shake peek rides bpm's row
           unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-          snprintf(v, sizeof v, "%u:%02u", hh, mm);
+          snprintf(v, sizeof v, "%u:%02u slp", hh, mm);
           graphics_draw_text(ctx, v, f14, GRect(num_x, r2, num_w, 18),
                              GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
-          graphics_draw_text(ctx, "slp", f14, GRect(unit_x, r2, unit_w, 18),
-                             GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
         } else {
           int hr = hr_bpm();
           if (hr > 0) {
-            snprintf(v, sizeof v, "%d", hr);
+            snprintf(v, sizeof v, "%d bpm", hr);
             graphics_draw_text(ctx, v, f14, GRect(num_x, r2, num_w, 18),
                                GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
-            graphics_draw_text(ctx, "bpm", f14, GRect(unit_x, r2, unit_w, 18),
-                               GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
           }
         }
       }
@@ -481,9 +473,9 @@ static void draw_map(GContext *ctx, GRect b) {
   // --- above the gauge: the small screens' health line (tall rects carry
   // health in the corner grid instead), or star mode's wander tally. Sleep
   // needs no slot of its own: the shake peek rides where bpm sits.
-  int gh = health_mode() ? 10 : 2;
+  int gh = health_on() ? 10 : 2;
   int vy = top_h - 16 - gh;
-  if (health_mode() && (round || compact)) {
+  if (health_on() && (round || compact)) {
     char st[16], km[16], tail[16] = "";
     fmt_thousands(st, sizeof st, steps_today());
     fmt1(km, sizeof km, walked_m_today() / 1000.0);
@@ -514,7 +506,7 @@ static void draw_map(GContext *ctx, GRect b) {
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
       }
     }
-  } else if (!health_mode()) {
+  } else if (!health_on()) {
     // the bottom panel owns the station identity now — this line carries
     // the day's wander instead
     fmt1(t1, sizeof t1, g_walk.path_ly10 / 10.0);
@@ -529,7 +521,7 @@ static void draw_map(GContext *ctx, GRect b) {
   // --- the gold strip: the day's hops so far, or the health sparkline
   int gx0 = round ? 40 : 2, gw = b.size.w - 2 * gx0;
   int gy0 = top_h - gh;
-  if (health_mode()) {
+  if (health_on()) {
     int live = minute_steps_live();
     s_minsteps[s_min] = live > 255 ? 255 : live;
 #ifdef PBL_COLOR
@@ -842,7 +834,7 @@ static void draw_map(GContext *ctx, GRect b) {
 
     // --- L2: the target — marker in the prefix column, name aligned with L1
     int l2 = y + 14;
-    int tw = !health_mode() && temp_fresh() && compact ? 34 : 0;
+    int tw = !health_on() && temp_fresh() && compact ? 34 : 0;
     graphics_context_set_text_color(ctx, GColorWhite);
     graphics_draw_text(ctx, browsing() ? ">>" : ">", fbold,
                        GRect(px_, l2, 40, 20),
@@ -1091,7 +1083,7 @@ static void tap_handler(AccelAxisType axis, int32_t dir) {
     s_browse = (cur + 1) % n;
     s_browse_at = time(NULL);
   }
-  if (health_mode()) {             // health mode: also peek the night's sleep
+  if (health_on()) {             // health mode: also peek the night's sleep
     s_sleep_peek_at = time(NULL);
     if (s_peek_timer) app_timer_cancel(s_peek_timer);
     s_peek_timer = app_timer_register(SLEEP_PEEK_MS + 300, peek_expire, NULL);

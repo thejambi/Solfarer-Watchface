@@ -21,15 +21,11 @@ module.exports = [
     items: [
       { type: 'heading', defaultValue: 'The wander' },
       {
-        type: 'select',
-        messageKey: 'FaceMode',
-        defaultValue: '0',
-        label: 'Face mode',
-        description: 'Star info shows the current star and next hop. Health stats swaps in your steps, sleep, heart rate, and the past-hour activity sparkline.',
-        options: [
-          { label: 'Star info', value: '0' },
-          { label: 'Health stats', value: '1' }
-        ]
+        type: 'toggle',
+        messageKey: 'ShowHealth',
+        defaultValue: true,
+        label: 'Health data',
+        description: 'Steps, distance, and heart rate beside the clock, plus the past-hour activity sparkline. A shake shows hours slept. Turn off for a pure star chart.'
       },
       {
         type: 'select',
