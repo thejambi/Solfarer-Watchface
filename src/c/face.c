@@ -383,7 +383,7 @@ static void draw_map(GContext *ctx, GRect b) {
     graphics_draw_text(ctx, t1,
                        fonts_get_system_font(compact ? FONT_KEY_LECO_32_BOLD_NUMBERS
                                                      : FONT_KEY_LECO_36_BOLD_NUMBERS),
-                       GRect(2, compact ? -2 : 1, b.size.w - 46, compact ? 34 : 38),
+                       GRect(2, compact ? -2 : -2, b.size.w - 46, compact ? 34 : 38),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     if (compact) {
       if (g_cfg.date_format != DATE_OFF) {
@@ -405,24 +405,26 @@ static void draw_map(GContext *ctx, GRect b) {
       // colors. The bpm row shows the night's sleep while the peek holds.
       GFont f14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
       GFont f14b = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-      int day_w = 30, day_x = b.size.w - day_w - 2;
-      int sep_x = day_x - 5;
+      // both columns hug the rule: health flush right against it, day
+      // values flush left from it
+      int sep_x = b.size.w - 37;
+      int day_x = sep_x + 5, day_w = b.size.w - day_x - 2;
       int r0 = -1, r1 = 13, r2 = 27;
       if (g_cfg.date_format != DATE_OFF) {
         const char *l1 = g_cfg.date_format == DATE_DAYNUM ? WD[s_wday] : MO[s_mon];
         graphics_context_set_text_color(ctx, COL_DIM);
         graphics_draw_text(ctx, l1, f14b, GRect(day_x, r0, day_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
         snprintf(buf, sizeof buf, "%d", s_mday);
         graphics_context_set_text_color(ctx, GColorWhite);
         graphics_draw_text(ctx, buf, f14, GRect(day_x, r1, day_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
       }
       if (temp_fresh()) {
         snprintf(buf, sizeof buf, "%d\xC2\xB0", (int)s_temp);
         graphics_context_set_text_color(ctx, COL_DIM);
         graphics_draw_text(ctx, buf, f14, GRect(day_x, r2, day_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
       }
       if (health_on()) {
         graphics_context_set_stroke_color(ctx, COL_FAINT);
