@@ -21,6 +21,7 @@ function settings() {
 }
 
 function weatherOn(s) {
+  if (s.WeatherOn === undefined) return true;   // on by default, like the watch
   return s.WeatherOn === true || s.WeatherOn === 1 || s.WeatherOn === '1';
 }
 

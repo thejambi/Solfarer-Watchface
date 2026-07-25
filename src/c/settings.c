@@ -17,6 +17,7 @@ static void defaults(void) {
   g_cfg.show_battery = true;
   g_cfg.show_bt = true;
   g_cfg.tap_info = true;
+  g_cfg.weather_on = true;
 }
 
 // Clay sends selects as strings ("0","1",..) and toggles as small ints —

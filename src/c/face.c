@@ -409,7 +409,7 @@ static void draw_map(GContext *ctx, GRect b) {
       // values flush left from it
       int sep_x = b.size.w - 37;
       int day_x = sep_x + 5, day_w = b.size.w - day_x - 2;
-      int r0 = -1, r1 = 13, r2 = 27;
+      int r0 = 0, r1 = 14, r2 = 28;
       if (g_cfg.date_format != DATE_OFF) {
         const char *l1 = g_cfg.date_format == DATE_DAYNUM ? WD[s_wday] : MO[s_mon];
         graphics_context_set_text_color(ctx, COL_DIM);
@@ -439,38 +439,51 @@ static void draw_map(GContext *ctx, GRect b) {
         int num_x = 2 + tmsz.w + 4;
         int num_w = sep_x - 4 - num_x;
         if (num_w < 12) num_w = 12;
+        int num_r = sep_x - 4;
         graphics_context_set_text_color(ctx, COL_GOOD);
         char v[16];
+        // Right-alignment is done by hand: measure, then draw left-aligned
+        // at (right edge - width) in a roomy box. The renderer's own
+        // right-aligned layout misplaced interior glyphs when the box ran
+        // near its width — digits drawn fused on top of each other.
+        #define GRID_ROW(str, font, row) do { \
+          GSize _s = graphics_text_layout_get_content_size((str), (font), \
+              GRect(0, 0, 200, 18), GTextOverflowModeTrailingEllipsis, \
+              GTextAlignmentLeft); \
+          int _x = num_r - _s.w; \
+          if (_x < num_x) _x = num_x; \
+          graphics_draw_text(ctx, (str), (font), GRect(_x, (row), _s.w + 6, 18), \
+              GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL); \
+        } while (0)
+        // Steps draw in GOTHIC_18_BOLD, not 14 — partly for presence, and
+        // partly because the 14-bold digit '4' has a broken advance that
+        // fuses it into its left neighbor ("8,842" mashed). 18-bold's
+        // digits are clean. Baseline matched to the 14-bold day column.
+        GFont f18b = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
         fmt_thousands(v, sizeof v, steps_today());
-        GSize ssz = graphics_text_layout_get_content_size(v, f14b,
-            GRect(0, 0, b.size.w, 18), GTextOverflowModeTrailingEllipsis,
+        GSize ssz = graphics_text_layout_get_content_size(v, f18b,
+            GRect(0, 0, 200, 22), GTextOverflowModeTrailingEllipsis,
             GTextAlignmentLeft);
-        // measure and draw can disagree by a pixel or two — an exact fit
-        // makes the renderer elide, which mashes glyphs together. Keep the
-        // comma only with comfortable room to spare.
-        if (ssz.w > num_w - 6)
+        if (ssz.w > num_w - 4)           // tight gap: the comma goes first
           snprintf(v, sizeof v, "%d", steps_today());
-        graphics_draw_text(ctx, v, f14b, GRect(num_x, r0, num_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        GRID_ROW(v, f18b, r0 - 3);
         char km[12];
         fmt1(km, sizeof km, walked_m_today() / 1000.0);
         snprintf(v, sizeof v, "%s km", km);
-        graphics_draw_text(ctx, v, f14, GRect(num_x, r1, num_w, 18),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+        GRID_ROW(v, f14, r1);
         int ss = sleep_peek() ? sleep_secs() : 0;
         if (ss > 0) {                    // the shake peek rides bpm's row
           unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
           snprintf(v, sizeof v, "%u:%02u slp", hh, mm);
-          graphics_draw_text(ctx, v, f14, GRect(num_x, r2, num_w, 18),
-                             GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+          GRID_ROW(v, f14, r2);
         } else {
           int hr = hr_bpm();
           if (hr > 0) {
             snprintf(v, sizeof v, "%d bpm", hr);
-            graphics_draw_text(ctx, v, f14, GRect(num_x, r2, num_w, 18),
-                               GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+            GRID_ROW(v, f14, r2);
           }
         }
+        #undef GRID_ROW
       }
     }
   }

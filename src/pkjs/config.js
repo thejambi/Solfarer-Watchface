@@ -106,9 +106,9 @@ module.exports = [
       {
         type: 'toggle',
         messageKey: 'WeatherOn',
-        defaultValue: false,
+        defaultValue: true,
         label: 'Current temperature',
-        description: 'Bottom-right corner, from Open-Meteo, refreshed every 30 minutes. Off by default: turning it on is what triggers the phone-location prompt — unless a manual location is set below.'
+        description: 'Under the date, from Open-Meteo, refreshed every 30 minutes. Uses phone location unless a manual location is set below.'
       },
       {
         type: 'input',
