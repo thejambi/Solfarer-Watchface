@@ -445,7 +445,10 @@ static void draw_map(GContext *ctx, GRect b) {
         GSize ssz = graphics_text_layout_get_content_size(v, f14b,
             GRect(0, 0, b.size.w, 18), GTextOverflowModeTrailingEllipsis,
             GTextAlignmentLeft);
-        if (ssz.w > num_w)               // tight gap: the comma goes first
+        // measure and draw can disagree by a pixel or two — an exact fit
+        // makes the renderer elide, which mashes glyphs together. Keep the
+        // comma only with comfortable room to spare.
+        if (ssz.w > num_w - 6)
           snprintf(v, sizeof v, "%d", steps_today());
         graphics_draw_text(ctx, v, f14b, GRect(num_x, r0, num_w, 18),
                            GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
