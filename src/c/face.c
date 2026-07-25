@@ -695,12 +695,22 @@ static void draw_map(GContext *ctx, GRect b) {
   } else {
     GFont fbold = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
     GFont freg = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+    // Prefixes ("@", ">", ">>") draw in their own column; both star names
+    // start at the same x — the width of the widest prefix — so they line
+    // up regardless of the browse marker.
+    GSize at_sz = graphics_text_layout_get_content_size("@", fbold,
+        GRect(0, 0, 40, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    GSize g2_sz = graphics_text_layout_get_content_size(">>", fbold,
+        GRect(0, 0, 40, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    int name_x = px_ + (at_sz.w > g2_sz.w ? at_sz.w : g2_sz.w) + 4;
+
     // --- L1: the star you're at — name bold, then distance and nature
-    snprintf(buf, sizeof buf, "@ %s", cn);
-    GSize nsz = graphics_text_layout_get_content_size(buf, fbold,
-        GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
     graphics_context_set_text_color(ctx, GColorWhite);
-    graphics_draw_text(ctx, buf, fbold, GRect(px_, y - 2, pw, 20),
+    graphics_draw_text(ctx, "@", fbold, GRect(px_, y - 2, 40, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    GSize nsz = graphics_text_layout_get_content_size(cn, fbold,
+        GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    graphics_draw_text(ctx, cn, fbold, GRect(name_x, y - 2, pw - (name_x - px_), 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     char ccls[8] = "";
     if (star_class(g_walk.cur) != '?')
@@ -715,23 +725,26 @@ static void draw_map(GContext *ctx, GRect b) {
     }
     graphics_context_set_text_color(ctx, COL_DIM);
     graphics_draw_text(ctx, buf, freg,
-                       GRect(px_ + nsz.w + 6, y - 2, pw - nsz.w - 6, 20),
+                       GRect(name_x + nsz.w + 6, y - 2, pw - (name_x - px_) - nsz.w - 6, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-    // --- L2: the target, name and data together — "> Deneb Algedi  16.9ly A5"
+    // --- L2: the target — marker in the prefix column, name aligned with L1
     int l2 = y + 13;
     int tw = !health_mode() && temp_fresh() ? 34 : 0;
-    snprintf(buf, sizeof buf, "%s %s", browsing() ? ">>" : ">", tn);
-    GSize tsz = graphics_text_layout_get_content_size(buf, fbold,
-        GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
     graphics_context_set_text_color(ctx, GColorWhite);
-    graphics_draw_text(ctx, buf, fbold, GRect(px_, l2, pw - tw, 20),
+    graphics_draw_text(ctx, browsing() ? ">>" : ">", fbold,
+                       GRect(px_, l2, 40, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    GSize tsz = graphics_text_layout_get_content_size(tn, fbold,
+        GRect(0, 0, pw, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    graphics_draw_text(ctx, tn, fbold,
+                       GRect(name_x, l2, pw - (name_x - px_) - tw, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     fmt1(t2, sizeof t2, td);
     snprintf(buf, sizeof buf, "%sly%s", t2, cls);
     graphics_context_set_text_color(ctx, COL_GOOD);
     graphics_draw_text(ctx, buf, freg,
-                       GRect(px_ + tsz.w + 6, l2, pw - tsz.w - 6 - tw, 20),
+                       GRect(name_x + tsz.w + 6, l2, pw - (name_x - px_) - tsz.w - 6 - tw, 20),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     if (!compact) {
       // --- L3: the target's nature, constellation spelled out in full
