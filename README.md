@@ -17,9 +17,17 @@ home whenever Sol is out of view; labels dodge the route and each other.
 
 It's a full watchface besides: steps (large, comma'd), distance, and heart
 rate in a corner grid facing weekday/date/temperature across a hairline
-rule; a minute-by-minute activity sparkline of the past hour; hours slept
-on a shake. Weather is Open-Meteo (manual location supported). The pure
-star chart is one toggle away.
+rule; a minute-by-minute activity sparkline of the past hour. Weather is
+Open-Meteo (manual location supported). The pure star chart is one toggle
+away.
+
+Sleep borrows the step slot, the way ActiveHour does it: until you've passed
+the **wake threshold** (a settings slider, default 500 steps today), that
+first row reads `7h 42m` rather than a step count — no label, since the
+shape can only mean one thing. Once you're moving, steps take the row back
+for the day. Same font and baseline, so nothing jumps when it flips; with no
+sleep recorded, steps simply keep the row. A shake still peeks sleep after
+that, but not while the row is already showing it.
 
 ## The wander
 

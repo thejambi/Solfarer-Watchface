@@ -28,6 +28,8 @@
     ],
     "messageKeys": [
       "ShowHealth",
+      "ShowSleep",
+      "WakeThreshold",
       "Cadence",
       "StartHour",
       "Cutscene",

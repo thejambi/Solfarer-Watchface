@@ -148,6 +148,22 @@ static int hr_bpm(void) {
 #endif
 }
 
+// ActiveHour's rule, adopted: last night's sleep holds the step slot until
+// you've actually got up and moved. Past the wake threshold, steps take it
+// back for the rest of the day. (With no sleep recorded there's nothing to
+// hold the slot with, so steps keep it.)
+static bool sleep_in_step_slot(void) {
+  return g_cfg.show_sleep && steps_today() <= (int)g_cfg.wake_threshold &&
+         sleep_secs() > 0;
+}
+
+// "6h 32m" — the slot says what it is by its shape; no unit tail needed
+static void fmt_sleep(char *buf, size_t cap, int secs) {
+  if (secs < 0) secs = 0;
+  snprintf(buf, cap, "%uh %um", ((unsigned)secs / 3600u) % 100u,
+           ((unsigned)secs / 60u) % 60u);
+}
+
 static uint8_t s_minsteps[60];
 static int s_step_snap = -1;
 static bool s_refetch_pending;
@@ -211,6 +227,8 @@ static int walked_m_today(void) { return 0; }
 static int kcal_today(void)     { return 0; }
 static int sleep_secs(void)     { return 0; }
 static int hr_bpm(void)         { return 0; }
+static bool sleep_in_step_slot(void) { return false; }
+static void fmt_sleep(char *b, size_t c, int s) { (void)s; snprintf(b, c, "0h 0m"); }
 static uint8_t s_minsteps[60];
 static void minute_track(struct tm *t) { (void)t; }
 static int minute_steps_live(void) { return 0; }
@@ -460,18 +478,31 @@ static void draw_map(GContext *ctx, GRect b) {
         // fuses it into its left neighbor ("8,842" mashed). 18-bold's
         // digits are clean. Baseline matched to the 14-bold day column.
         GFont f18b = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-        fmt_thousands(v, sizeof v, steps_today());
+        bool slp_slot = sleep_in_step_slot();
+        if (slp_slot) {                  // the night still holds the slot
+          fmt_sleep(v, sizeof v, sleep_secs());
+        } else {
+          fmt_thousands(v, sizeof v, steps_today());
+        }
         GSize ssz = graphics_text_layout_get_content_size(v, f18b,
             GRect(0, 0, 200, 22), GTextOverflowModeTrailingEllipsis,
             GTextAlignmentLeft);
-        if (ssz.w > num_w - 4)           // tight gap: the comma goes first
-          snprintf(v, sizeof v, "%d", steps_today());
+        if (ssz.w > num_w - 4) {         // tight gap: shed the separator
+          if (slp_slot) snprintf(v, sizeof v, "%uh%02um",
+              ((unsigned)sleep_secs() / 3600u) % 100u,
+              ((unsigned)sleep_secs() / 60u) % 60u);
+          else snprintf(v, sizeof v, "%d", steps_today());
+        }
+        // sleep keeps the steps row's weight and baseline, so the slot
+        // doesn't visibly jump when the threshold flips it over
         GRID_ROW(v, f18b, r0 - 3);
         char km[12];
         fmt1(km, sizeof km, walked_m_today() / 1000.0);
         snprintf(v, sizeof v, "%s km", km);
         GRID_ROW(v, f14, r1);
-        int ss = sleep_peek() ? sleep_secs() : 0;
+        // the peek only has something to say once the step slot has stopped
+        // showing the night itself
+        int ss = (sleep_peek() && !slp_slot) ? sleep_secs() : 0;
         if (ss > 0) {                    // the shake peek rides bpm's row
           unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
           snprintf(v, sizeof v, "%u:%02u slp", hh, mm);
@@ -495,9 +526,9 @@ static void draw_map(GContext *ctx, GRect b) {
   int vy = top_h - 16 - gh;
   if (health_on() && (round || compact)) {
     char st[16], km[16], tail[16] = "";
-    fmt_thousands(st, sizeof st, steps_today());
+    bool slp_slot = sleep_in_step_slot();
     fmt1(km, sizeof km, walked_m_today() / 1000.0);
-    int ss = sleep_peek() ? sleep_secs() : 0;
+    int ss = (sleep_peek() && !slp_slot) ? sleep_secs() : 0;
     if (ss > 0) {
       unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
       snprintf(tail, sizeof tail, " %uh%02um", hh, mm);
@@ -505,7 +536,13 @@ static void draw_map(GContext *ctx, GRect b) {
       int hr = hr_bpm();
       if (hr > 0) snprintf(tail, sizeof tail, " %dbpm", hr);
     }
-    snprintf(buf, sizeof buf, "%s steps %skm%s", st, km, tail);
+    if (slp_slot) {                  // the night in the step slot, unlabelled
+      fmt_sleep(st, sizeof st, sleep_secs());
+      snprintf(buf, sizeof buf, "%s %skm%s", st, km, tail);
+    } else {
+      fmt_thousands(st, sizeof st, steps_today());
+      snprintf(buf, sizeof buf, "%s steps %skm%s", st, km, tail);
+    }
     graphics_context_set_text_color(ctx, COL_GOOD);
     if (round) {
       graphics_draw_text(ctx, buf, fonts_get_system_font(FONT_KEY_GOTHIC_14),

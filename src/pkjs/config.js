@@ -25,7 +25,24 @@ module.exports = [
         messageKey: 'ShowHealth',
         defaultValue: true,
         label: 'Health data',
-        description: 'Steps, distance, and heart rate beside the clock, plus the past-hour activity sparkline. A shake shows hours slept. Turn off for a pure star chart.'
+        description: 'Steps, distance, and heart rate beside the clock, plus the past-hour activity sparkline. Turn off for a pure star chart.'
+      },
+      {
+        type: 'toggle',
+        messageKey: 'ShowSleep',
+        defaultValue: true,
+        label: 'Show sleep time',
+        description: 'Before you get moving, the step slot shows last night\'s sleep as 6h 32m instead.'
+      },
+      {
+        type: 'slider',
+        messageKey: 'WakeThreshold',
+        defaultValue: 500,
+        label: 'Wake threshold',
+        description: 'Show sleep time until this many steps have been taken today.',
+        min: 0,
+        max: 2000,
+        step: 50
       },
       {
         type: 'select',
@@ -95,7 +112,7 @@ module.exports = [
         messageKey: 'TapInfo',
         defaultValue: true,
         label: 'Shake gesture',
-        description: 'Browse the neighbor stars (display only — the bell still flies its own pick). In health mode a shake also shows hours slept for a few seconds.'
+        description: 'Browse the neighbor stars (display only — the bell still flies its own pick). In health mode a shake also peeks hours slept, once the step count has taken its slot back.'
       }
     ]
   },

@@ -18,6 +18,8 @@ static void defaults(void) {
   g_cfg.show_bt = true;
   g_cfg.tap_info = true;
   g_cfg.weather_on = true;
+  g_cfg.show_sleep = true;
+  g_cfg.wake_threshold = 500;
 }
 
 // Clay sends selects as strings ("0","1",..) and toggles as small ints —
@@ -43,6 +45,13 @@ static void inbox(DictionaryIterator *it, void *ctx) {
   g_cfg.bt_vibe      = tup_int(it, MESSAGE_KEY_BTVibe, g_cfg.bt_vibe);
   g_cfg.tap_info     = tup_int(it, MESSAGE_KEY_TapInfo, g_cfg.tap_info);
   g_cfg.weather_on   = tup_int(it, MESSAGE_KEY_WeatherOn, g_cfg.weather_on);
+  g_cfg.show_sleep   = tup_int(it, MESSAGE_KEY_ShowSleep, g_cfg.show_sleep);
+  {
+    int wt = tup_int(it, MESSAGE_KEY_WakeThreshold, g_cfg.wake_threshold);
+    if (wt < 0) wt = 0;
+    if (wt > 10000) wt = 10000;
+    g_cfg.wake_threshold = (uint16_t)wt;
+  }
   Tuple *wt = dict_find(it, MESSAGE_KEY_WeatherTemp);   // phone-side fetch
   if (wt) face_set_temp((int)wt->value->int32);
   g_cfg.version = SETTINGS_VERSION;

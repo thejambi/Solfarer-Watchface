@@ -18,6 +18,11 @@ typedef struct {
   bool leading_zero, show_battery, show_bt;
   bool hop_vibe, bt_vibe, tap_info;
   bool weather_on;
+  // ActiveHour's rule: last night's sleep holds the step slot until you've
+  // actually got up and moved past wake_threshold steps, then steps take it
+  // back. Appended — older saves stop short and keep these defaults.
+  bool show_sleep;
+  uint16_t wake_threshold;
 } Settings;
 
 extern Settings g_cfg;
