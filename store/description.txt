@@ -2,11 +2,11 @@ Wander the real stars. Every morning your ship starts at Sol, and every hour it 
 
 The map is a traveling 40-light-year viewport that rides the wander. The gold route sweeps to a different neighbor every minute; flick your wrist to browse the rest. When the hour strikes, the flight plays out as a twin-paradox cutscene - honest relativity at 1g: the universe ages 19 years while you age 6 on a 74-light-year run. A gold signpost always points home to Sol. By nightfall you're deep in the Bubble; at your chosen morning hour, you wake at Sol with a new day's journey ahead.
 
-It's a full watchface too: steps, distance, and heart rate beside the clock, a minute-by-minute activity sparkline of your past hour, weekday, date, and current temperature. A shake shows last night's sleep. Everything optional; the pure star chart is one toggle away.
+It's a full watchface too: steps, distance, and heart rate beside the clock, a minute-by-minute activity sparkline of your past hour, weekday, date, and current temperature. Last night's sleep takes the step slot each morning - "7h 42m" - and hands it back to your step count once you're up and moving, at a wake threshold you set. Everything optional; the pure star chart is one toggle away.
 
 * 2,235 real star systems, names, spectral classes, and constellations included
 * Deterministic daily wander - miss an hour and it catches up instantly
-* Health data on the face; sleep on a wrist-flick; Open-Meteo weather
+* Health data on the face; last night's sleep each morning; Open-Meteo weather
 * Configurable start-at-Sol hour and hop cadence (hourly or half-hourly)
 * Sibling of the Lighthaul watchface - same bones, real galaxy
 
