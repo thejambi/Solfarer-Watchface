@@ -26,8 +26,9 @@ the **wake threshold** (a settings slider, default 500 steps today), that
 first row reads `7h 42m` rather than a step count — no label, since the
 shape can only mean one thing. Once you're moving, steps take the row back
 for the day. Same font and baseline, so nothing jumps when it flips; with no
-sleep recorded, steps simply keep the row. A shake still peeks sleep after
-that, but not while the row is already showing it.
+sleep recorded, steps simply keep the row. That's all of sleep here, on
+purpose: it shows up when you care and then gets out of the way. The Pebble
+Health app is the place for a deeper dig.
 
 ## The wander
 

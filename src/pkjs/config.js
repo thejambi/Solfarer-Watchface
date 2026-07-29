@@ -112,7 +112,7 @@ module.exports = [
         messageKey: 'TapInfo',
         defaultValue: true,
         label: 'Shake gesture',
-        description: 'Browse the neighbor stars (display only — the bell still flies its own pick). In health mode a shake also peeks hours slept, once the step count has taken its slot back.'
+        description: 'Browse the neighbor stars (display only — the bell still flies its own pick).'
       }
     ]
   },

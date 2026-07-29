@@ -79,23 +79,6 @@ static int active_sel(int window) {
 
 static void browse_reset(void) { s_browse = -1; }
 
-// Health mode's shake: no card — the stats line's kcal swaps to hours slept
-// for a few seconds (sleep is the only figure the face doesn't already show).
-#define SLEEP_PEEK_MS 6000
-static time_t s_sleep_peek_at;
-static AppTimer *s_peek_timer;
-
-static bool sleep_peek(void) {
-  return s_sleep_peek_at != 0 &&
-         time(NULL) - s_sleep_peek_at < SLEEP_PEEK_MS / 1000;
-}
-
-static void peek_expire(void *ctx) {
-  s_peek_timer = NULL;
-  s_sleep_peek_at = 0;
-  face_poke();
-}
-
 // ---------------------------------------------------------------------------
 // Health — the health-stats mode trades star chrome for the body's own.
 // Same machinery as the Lighthaul watchface (see its README for the three
@@ -487,7 +470,11 @@ static void draw_map(GContext *ctx, GRect b) {
         GSize ssz = graphics_text_layout_get_content_size(v, f18b,
             GRect(0, 0, 200, 22), GTextOverflowModeTrailingEllipsis,
             GTextAlignmentLeft);
-        if (ssz.w > num_w - 4) {         // tight gap: shed the separator
+        // Sleep is only six characters and right-aligned against the rule,
+        // so it may sit a little closer to the clock than a step count
+        // would — otherwise "7h 42m" loses its space on wide clock digits
+        // and the format flickers as the minutes change.
+        if (ssz.w > num_w - (slp_slot ? 0 : 4)) {
           if (slp_slot) snprintf(v, sizeof v, "%uh%02um",
               ((unsigned)sleep_secs() / 3600u) % 100u,
               ((unsigned)sleep_secs() / 60u) % 60u);
@@ -500,19 +487,10 @@ static void draw_map(GContext *ctx, GRect b) {
         fmt1(km, sizeof km, walked_m_today() / 1000.0);
         snprintf(v, sizeof v, "%s km", km);
         GRID_ROW(v, f14, r1);
-        // the peek only has something to say once the step slot has stopped
-        // showing the night itself
-        int ss = (sleep_peek() && !slp_slot) ? sleep_secs() : 0;
-        if (ss > 0) {                    // the shake peek rides bpm's row
-          unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-          snprintf(v, sizeof v, "%u:%02u slp", hh, mm);
+        int hr = hr_bpm();
+        if (hr > 0) {
+          snprintf(v, sizeof v, "%d bpm", hr);
           GRID_ROW(v, f14, r2);
-        } else {
-          int hr = hr_bpm();
-          if (hr > 0) {
-            snprintf(v, sizeof v, "%d bpm", hr);
-            GRID_ROW(v, f14, r2);
-          }
         }
         #undef GRID_ROW
       }
@@ -520,22 +498,15 @@ static void draw_map(GContext *ctx, GRect b) {
   }
 
   // --- above the gauge: the small screens' health line (tall rects carry
-  // health in the corner grid instead), or star mode's wander tally. Sleep
-  // needs no slot of its own: the shake peek rides where bpm sits.
+  // health in the corner grid instead), or star mode's wander tally.
   int gh = health_on() ? 10 : 2;
   int vy = top_h - 16 - gh;
   if (health_on() && (round || compact)) {
     char st[16], km[16], tail[16] = "";
     bool slp_slot = sleep_in_step_slot();
     fmt1(km, sizeof km, walked_m_today() / 1000.0);
-    int ss = (sleep_peek() && !slp_slot) ? sleep_secs() : 0;
-    if (ss > 0) {
-      unsigned hh = ((unsigned)ss / 3600u) % 100u, mm = ((unsigned)ss / 60u) % 60u;
-      snprintf(tail, sizeof tail, " %uh%02um", hh, mm);
-    } else {
-      int hr = hr_bpm();
-      if (hr > 0) snprintf(tail, sizeof tail, " %dbpm", hr);
-    }
+    int hr = hr_bpm();
+    if (hr > 0) snprintf(tail, sizeof tail, " %dbpm", hr);
     if (slp_slot) {                  // the night in the step slot, unlabelled
       fmt_sleep(st, sizeof st, sleep_secs());
       snprintf(buf, sizeof buf, "%s %skm%s", st, km, tail);
@@ -1138,11 +1109,6 @@ static void tap_handler(AccelAxisType axis, int32_t dir) {
     s_browse = (cur + 1) % n;
     s_browse_at = time(NULL);
   }
-  if (health_on()) {             // health mode: also peek the night's sleep
-    s_sleep_peek_at = time(NULL);
-    if (s_peek_timer) app_timer_cancel(s_peek_timer);
-    s_peek_timer = app_timer_register(SLEEP_PEEK_MS + 300, peek_expire, NULL);
-  }
   if (s_layer) layer_mark_dirty(s_layer);
 }
 
@@ -1193,7 +1159,6 @@ void face_init(void) {
 
 void face_deinit(void) {
   cancel_timer();
-  if (s_peek_timer) { app_timer_cancel(s_peek_timer); s_peek_timer = NULL; }
   tick_timer_service_unsubscribe();
   accel_tap_service_unsubscribe();
   connection_service_unsubscribe();
