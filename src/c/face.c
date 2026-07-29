@@ -104,12 +104,6 @@ static int walked_m_today(void) {
 #endif
   return (int)health_service_sum_today(HealthMetricWalkedDistanceMeters);
 }
-static int kcal_today(void) {
-#ifdef DEV_FAKE_HEALTH
-  return 312;
-#endif
-  return (int)health_service_sum_today(HealthMetricActiveKCalories);
-}
 static int sleep_secs(void) {
 #ifdef DEV_FAKE_HEALTH
   return 7 * 3600 + 42 * 60;
@@ -207,7 +201,6 @@ static void health_deinit(void) { health_service_events_unsubscribe(); }
 #else
 static int steps_today(void)    { return 0; }
 static int walked_m_today(void) { return 0; }
-static int kcal_today(void)     { return 0; }
 static int sleep_secs(void)     { return 0; }
 static int hr_bpm(void)         { return 0; }
 static bool sleep_in_step_slot(void) { return false; }
